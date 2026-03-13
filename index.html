@@ -34,8 +34,8 @@
             <span class="status-dot" data-deoxy-dot></span>
             <span class="status-text" data-deoxy-label>Deoxy On</span>
           </div>
-          <span class="status-text">Wi-Fi</span>
-          <span class="status-text">Battery 86%</span>
+          <span class="status-text" data-network>Online</span>
+          <span class="status-text" data-battery>Battery --%</span>
           <span class="status-time" data-time></span>
           <button class="control-toggle" data-control-toggle>Control</button>
         </div>
@@ -108,7 +108,7 @@
               </div>
               <div>
                 <label class="field-label">Routing mode</label>
-                <select class="field" data-deoxy-mode>
+                <select class="field selector" data-deoxy-mode>
                   <option value="Smart">Smart</option>
                   <option value="Manual">Manual</option>
                   <option value="deoxy-pass">deoxy-pass</option>

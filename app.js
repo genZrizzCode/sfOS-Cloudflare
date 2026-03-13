@@ -13,6 +13,8 @@ const deoxyEndpoint = document.querySelector("[data-deoxy-endpoint]");
 const deoxyLabel = document.querySelector("[data-deoxy-label]");
 const deoxySub = document.querySelector("[data-deoxy-sub]");
 const timeEl = document.querySelector("[data-time]");
+const batteryEl = document.querySelector("[data-battery]");
+const networkEl = document.querySelector("[data-network]");
 const controlToggle = document.querySelector("[data-control-toggle]");
 const controlCenter = document.querySelector("[data-control-center]");
 const logEl = document.querySelector("[data-log]");
@@ -62,14 +64,16 @@ let resizeState = null;
 
 const pad = (value) => String(value).padStart(2, "0");
 
-const formatTime = (date) =>
-  date.toLocaleString([], {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+const timeFormatter = new Intl.DateTimeFormat([], {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
+const formatTime = (date) => timeFormatter.format(date);
 
 const formatUptime = () => {
   const diff = Math.floor((Date.now() - state.bootedAt) / 1000);
@@ -79,9 +83,119 @@ const formatUptime = () => {
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 };
 
-const updateTime = () => {
+const timeState = {
+  baseEpochMs: Date.now(),
+  basePerfMs: typeof performance !== "undefined" ? performance.now() : 0,
+  source: "device",
+};
+
+const setTimeBase = (epochMs, source) => {
+  timeState.baseEpochMs = epochMs;
+  timeState.basePerfMs = typeof performance !== "undefined" ? performance.now() : 0;
+  timeState.source = source;
+};
+
+const renderTime = () => {
   if (!timeEl) return;
-  timeEl.textContent = formatTime(new Date());
+  const nowMs =
+    timeState.baseEpochMs +
+    (typeof performance !== "undefined" ? performance.now() : 0) -
+    timeState.basePerfMs;
+  timeEl.textContent = formatTime(new Date(nowMs));
+};
+
+const fetchNetworkTime = async () => {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const endpoint = tz
+    ? `https://worldtimeapi.org/api/timezone/${encodeURIComponent(tz)}`
+    : "https://worldtimeapi.org/api/ip";
+  const response = await fetch(endpoint, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Time API error");
+  }
+  const data = await response.json();
+  if (!data || !data.datetime) {
+    throw new Error("Time API missing datetime");
+  }
+  const epochMs = Date.parse(data.datetime);
+  if (Number.isNaN(epochMs)) {
+    throw new Error("Time API invalid datetime");
+  }
+  setTimeBase(epochMs, "worldtimeapi");
+};
+
+const startClock = () => {
+  if (!timeEl) return;
+  const tick = () => {
+    renderTime();
+    const nowMs =
+      timeState.baseEpochMs +
+      (typeof performance !== "undefined" ? performance.now() : 0) -
+      timeState.basePerfMs;
+    const msToNextSecond = 1000 - (nowMs % 1000);
+    window.setTimeout(tick, Math.max(200, msToNextSecond));
+  };
+  tick();
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      renderTime();
+      fetchNetworkTime().catch(() => {
+        setTimeBase(Date.now(), "device");
+      });
+    }
+  });
+};
+
+const initNetworkClock = () => {
+  fetchNetworkTime().catch(() => {
+    setTimeBase(Date.now(), "device");
+  });
+  window.setInterval(() => {
+    fetchNetworkTime().catch(() => {
+      if (timeState.source !== "worldtimeapi") {
+        setTimeBase(Date.now(), "device");
+      }
+    });
+  }, 10 * 60 * 1000);
+};
+
+const updateBatteryDisplay = (battery) => {
+  if (!batteryEl || !battery) return;
+  const percent = Math.round(battery.level * 100);
+  batteryEl.textContent = battery.charging
+    ? `Battery ${percent}% (Charging)`
+    : `Battery ${percent}%`;
+};
+
+const initBattery = () => {
+  if (!batteryEl) return;
+  if (!navigator.getBattery) {
+    batteryEl.textContent = "Battery --%";
+    return;
+  }
+  navigator
+    .getBattery()
+    .then((battery) => {
+      updateBatteryDisplay(battery);
+      const handler = () => updateBatteryDisplay(battery);
+      battery.addEventListener("levelchange", handler);
+      battery.addEventListener("chargingchange", handler);
+    })
+    .catch(() => {
+      batteryEl.textContent = "Battery --%";
+    });
+};
+
+const updateNetworkStatus = () => {
+  if (!networkEl) return;
+  networkEl.textContent = navigator.onLine ? "Online" : "Offline";
+};
+
+const initNetworkStatus = () => {
+  if (!networkEl) return;
+  updateNetworkStatus();
+  window.addEventListener("online", updateNetworkStatus);
+  window.addEventListener("offline", updateNetworkStatus);
 };
 
 const log = (message) => {
@@ -1072,11 +1186,13 @@ if (themeToggle) {
 }
 
 initCalculator();
+initBattery();
+initNetworkClock();
+initNetworkStatus();
 
 setDeoxyEnabled(state.deoxyEnabled);
 setDeoxyMode(state.deoxyMode);
-updateTime();
-setInterval(updateTime, 60000);
+startClock();
 setInterval(() => {
   metricUptime.textContent = formatUptime();
 }, 1000);

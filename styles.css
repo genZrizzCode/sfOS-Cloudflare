@@ -420,6 +420,10 @@ body.theme-dark .window__resize {
   font-family: inherit;
 }
 
+.selector {
+  cursor: pointer;
+}
+
 .pill {
   margin-top: 6px;
   background: rgba(255, 107, 74, 0.12);
@@ -484,6 +488,7 @@ body.theme-dark .pill {
   border-radius: 12px;
   padding: 10px 16px;
   font-weight: 600;
+  cursor: pointer;
 }
 
 
@@ -568,6 +573,7 @@ body.theme-dark .pill {
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 600;
+  cursor: pointer;
 }
 
 .calc-tab.is-active {
