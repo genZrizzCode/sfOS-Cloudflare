@@ -33,10 +33,16 @@ function rewriteUrl(value, baseUrl) {
   const trimmed = value.trim();
   if (
     trimmed.startsWith("/deoxy?target=") ||
+    trimmed.startsWith("about:") ||
+    trimmed.startsWith("blob:") ||
     trimmed.startsWith("data:") ||
     trimmed.startsWith("javascript:") ||
     trimmed.startsWith("mailto:") ||
+    trimmed.startsWith("moz-extension:") ||
+    trimmed.startsWith("safari-extension:") ||
     trimmed.startsWith("tel:") ||
+    trimmed.startsWith("chrome-extension:") ||
+    trimmed.startsWith("edge:") ||
     trimmed.startsWith("#")
   ) {
     return trimmed;
@@ -62,8 +68,30 @@ function rewriteSrcset(value, baseUrl) {
     .join(", ");
 }
 
+function rewriteCss(css, baseUrl) {
+  if (!css) return css;
+  let next = css.replace(
+    /@import\s+(?:url\()?\s*['"]?([^'")\s]+)['"]?\s*\)?/gi,
+    (match, value) => match.replace(value, rewriteUrl(value, baseUrl)),
+  );
+  next = next.replace(
+    /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi,
+    (match, quote, value) => {
+      const rewritten = rewriteUrl(value, baseUrl);
+      if (!rewritten || rewritten === value) return match;
+      const q = quote || "";
+      return `url(${q}${rewritten}${q})`;
+    },
+  );
+  return next;
+}
+
 function rewriteHtml(html, baseUrl) {
   let next = html;
+  next = next.replace(
+    /<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi,
+    "",
+  );
   next = next.replace(
     /\s(href|src|action)=["']([^"']+)["']/gi,
     (match, attr, value) => ` ${attr}="${rewriteUrl(value, baseUrl)}"`,
@@ -71,6 +99,16 @@ function rewriteHtml(html, baseUrl) {
   next = next.replace(
     /\ssrcset=["']([^"']+)["']/gi,
     (match, value) => ` srcset="${rewriteSrcset(value, baseUrl)}"`,
+  );
+  next = next.replace(
+    /\sstyle=(["'])([^"']*)\1/gi,
+    (match, quote, value) =>
+      ` style=${quote}${rewriteCss(value, baseUrl)}${quote}`,
+  );
+  next = next.replace(
+    /<style([^>]*)>([\s\S]*?)<\/style>/gi,
+    (match, attrs, value) =>
+      `<style${attrs}>${rewriteCss(value, baseUrl)}</style>`,
   );
   return injectDeoxyScript(next, baseUrl);
 }
@@ -100,10 +138,16 @@ function injectDeoxyScript(html, baseUrl) {
           if (!url) return true;
           return (
             url.startsWith(prefix) ||
+            url.startsWith("about:") ||
+            url.startsWith("blob:") ||
             url.startsWith("data:") ||
             url.startsWith("javascript:") ||
             url.startsWith("mailto:") ||
+            url.startsWith("moz-extension:") ||
+            url.startsWith("safari-extension:") ||
             url.startsWith("tel:") ||
+            url.startsWith("chrome-extension:") ||
+            url.startsWith("edge:") ||
             url.startsWith("#")
           );
         };
@@ -478,6 +522,20 @@ function handleDeoxy(req, res) {
       });
       deoxyRes.on("end", () => {
         const rewritten = rewriteHtml(body, targetUrl);
+        headers["content-length"] = Buffer.byteLength(rewritten);
+        res.writeHead(status, headers);
+        res.end(rewritten);
+      });
+      return;
+    }
+    if (contentType.includes("text/css")) {
+      let body = "";
+      deoxyRes.setEncoding("utf8");
+      deoxyRes.on("data", (chunk) => {
+        body += chunk;
+      });
+      deoxyRes.on("end", () => {
+        const rewritten = rewriteCss(body, targetUrl);
         headers["content-length"] = Buffer.byteLength(rewritten);
         res.writeHead(status, headers);
         res.end(rewritten);
