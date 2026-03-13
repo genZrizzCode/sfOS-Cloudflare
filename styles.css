@@ -468,6 +468,7 @@ body.theme-dark .pill {
   padding: 12px;
   font-family: -apple-system, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
   background: var(--surface-solid);
+  color: var(--ink);
 }
 
 .dock {
@@ -503,6 +504,7 @@ body.theme-dark .pill {
   place-items: center;
   font-weight: 600;
   box-shadow: 0 10px 20px rgba(27, 36, 48, 0.15);
+  color: var(--ink);
 }
 
 .dock__label {
