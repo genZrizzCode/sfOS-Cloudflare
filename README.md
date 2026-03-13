@@ -1,10 +1,10 @@
-# sfOS Prototype
+# <span style="font-family: 'SF Pro Display', sans-serif;">sfOS</span>
 
 This project is a macOS-inspired web OS concept with a built-in deoxy layer. The UI includes a dock, menu bar, draggable windows, and a Deoxy Center that simulates system-wide routing.
 
 ## Open locally (static demo)
 
-Open `index.html` directly in a browser, or run a local server:
+Open `index.html` directly in a browser for the UI demo only (deoxy tunneling requires a server), or run a local server:
 
 `python3 -m http.server 5173`
 
@@ -39,5 +39,9 @@ Once deployed:
 
 ## Notes
 
-- Deoxy routing is simulated in `app.js` to keep the prototype self-contained.
+- The UI and tunnel status are simulated in `app.js`, but real deoxy proxying runs via `functions/deoxy.js` (Cloudflare Pages) or `server.js` locally.
 - Update the endpoint, mode, and toggle in the Deoxy Center to see changes reflected across the UI.
+- Menu bar time shows seconds and syncs to WorldTimeAPI every 10 minutes with device-time fallback.
+- Menu bar battery uses the browser Battery API when available.
+- Menu bar network shows Online/Offline based on browser connection events.
+- Window content scrolls automatically when the window height is too small to fit the sub-app content.
