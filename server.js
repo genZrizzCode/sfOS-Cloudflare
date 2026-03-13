@@ -139,6 +139,23 @@ function injectDeoxyScript(html, baseUrl) {
         const log = (...args) => writeLog("log", ...args);
         const nativePushState = history.pushState.bind(history);
         const nativeReplaceState = history.replaceState.bind(history);
+        const normalizeUrlInput = (input) => {
+          if (input == null) return null;
+          if (typeof input === "string") return input;
+          if (input instanceof URL) return input.toString();
+          if (typeof input === "object" && "href" in input) {
+            try {
+              return String(input.href);
+            } catch (error) {
+              return null;
+            }
+          }
+          try {
+            return String(input);
+          } catch (error) {
+            return null;
+          }
+        };
         log("injected", window.location.href);
         try {
           document.cookie =
@@ -297,16 +314,40 @@ function injectDeoxyScript(html, baseUrl) {
           if (window.location && window.location.assign) {
             const originalAssign = window.location.assign.bind(window.location);
             window.location.assign = function(url) {
-              const next = rewriteIfNeeded(url, "location.assign");
-              return originalAssign(next || url);
+              const urlString = normalizeUrlInput(url);
+              const next = urlString
+                ? rewriteIfNeeded(urlString, "location.assign")
+                : null;
+              return originalAssign(next || urlString || url);
             };
           }
           if (window.location && window.location.replace) {
             const originalReplace = window.location.replace.bind(window.location);
             window.location.replace = function(url) {
-              const next = rewriteIfNeeded(url, "location.replace");
-              return originalReplace(next || url);
+              const urlString = normalizeUrlInput(url);
+              const next = urlString
+                ? rewriteIfNeeded(urlString, "location.replace")
+                : null;
+              return originalReplace(next || urlString || url);
             };
+          }
+          const locProto = Object.getPrototypeOf(window.location);
+          const hrefDesc = Object.getOwnPropertyDescriptor(locProto, "href");
+          if (hrefDesc && hrefDesc.configurable && hrefDesc.set) {
+            Object.defineProperty(locProto, "href", {
+              configurable: true,
+              enumerable: hrefDesc.enumerable,
+              get: hrefDesc.get ? hrefDesc.get.bind(window.location) : undefined,
+              set: function(value) {
+                const urlString = normalizeUrlInput(value);
+                const next = urlString
+                  ? rewriteIfNeeded(urlString, "location.href")
+                  : null;
+                return hrefDesc.set.call(this, next || urlString || value);
+              },
+            });
+          } else {
+            log("location.href override skipped");
           }
         } catch (error) {
           log("location override failed", error.message);
@@ -315,9 +356,10 @@ function injectDeoxyScript(html, baseUrl) {
           const original =
             method === "pushState" ? nativePushState : nativeReplaceState;
           history[method] = function(state, title, url) {
-            if (typeof url === "string") {
-              const next = rewriteIfNeeded(url, "history." + method);
-              const result = original.call(this, state, title, next || url);
+            const urlString = normalizeUrlInput(url);
+            if (urlString) {
+              const next = rewriteIfNeeded(urlString, "history." + method);
+              const result = original.call(this, state, title, next || urlString);
               ensureDeoxyUrl("history." + method);
               return result;
             }
@@ -335,8 +377,14 @@ function injectDeoxyScript(html, baseUrl) {
                 if (next && next !== input) {
                   return originalFetch(next, init);
                 }
+              } else if (input instanceof URL) {
+                const urlString = input.toString();
+                const next = rewriteIfNeeded(urlString, "fetch");
+                if (next && next !== urlString) {
+                  return originalFetch(next, init);
+                }
               } else if (input && input.url) {
-                const next = rewriteIfNeeded(input.url, "fetch");
+                const next = rewriteIfNeeded(String(input.url), "fetch");
                 if (next && next !== input.url) {
                   return originalFetch(new Request(next, input), init);
                 }
@@ -348,8 +396,9 @@ function injectDeoxyScript(html, baseUrl) {
         if (window.XMLHttpRequest) {
           const originalOpen = XMLHttpRequest.prototype.open;
           XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-            const next = rewriteIfNeeded(url, "xhr");
-            return originalOpen.call(this, method, next || url, ...rest);
+            const urlString = normalizeUrlInput(url);
+            const next = urlString ? rewriteIfNeeded(urlString, "xhr") : null;
+            return originalOpen.call(this, method, next || urlString || url, ...rest);
           };
         }
         scan(document);
