@@ -17,10 +17,6 @@ const controlToggle = document.querySelector("[data-control-toggle]");
 const controlCenter = document.querySelector("[data-control-center]");
 const logEl = document.querySelector("[data-log]");
 const runTest = document.querySelector("[data-run-test]");
-const browserForm = document.querySelector("[data-browser-form]");
-const browserInput = document.querySelector("[data-browser-input]");
-const browserStatus = document.querySelector("[data-browser-status]");
-const browserOutput = document.querySelector("[data-browser-output]");
 const tunnelForm = document.querySelector("[data-tunnel-form]");
 const tunnelInput = document.querySelector("[data-tunnel-input]");
 const tunnelStatus = document.querySelector("[data-tunnel-status]");
@@ -218,19 +214,6 @@ if (runTest) {
   runTest.addEventListener("click", () => {
     log("Handshake initiated.");
     simulateRequest("Handshake");
-  });
-}
-
-if (browserForm) {
-  browserForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const url = browserInput.value.trim() || "https://sfos.local";
-    browserStatus.textContent = "Connecting...";
-    browserOutput.textContent = `Resolving ${url}`;
-    simulateRequest("Browser").then((result) => {
-      browserStatus.textContent = "Live session";
-      browserOutput.textContent = `Loaded ${url} ${result.hop}.`;
-    });
   });
 }
 
