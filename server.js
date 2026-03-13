@@ -19,6 +19,171 @@ const MIME_TYPES = {
   ".ico": "image/x-icon",
 };
 
+const STRIP_RESPONSE_HEADERS = new Set([
+  "content-security-policy",
+  "content-security-policy-report-only",
+  "x-frame-options",
+  "content-encoding",
+]);
+
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+function rewriteUrl(value, baseUrl) {
+  if (!value) return value;
+  const trimmed = value.trim();
+  if (
+    trimmed.startsWith("/deoxy?target=") ||
+    trimmed.startsWith("data:") ||
+    trimmed.startsWith("javascript:") ||
+    trimmed.startsWith("mailto:") ||
+    trimmed.startsWith("tel:") ||
+    trimmed.startsWith("#")
+  ) {
+    return trimmed;
+  }
+  try {
+    const absolute = new URL(trimmed, baseUrl);
+    return `/deoxy?target=${encodeURIComponent(absolute.toString())}`;
+  } catch {
+    return value;
+  }
+}
+
+function rewriteSrcset(value, baseUrl) {
+  if (!value) return value;
+  return value
+    .split(",")
+    .map((entry) => {
+      const parts = entry.trim().split(/\s+/);
+      if (!parts.length) return entry;
+      const rewritten = rewriteUrl(parts[0], baseUrl);
+      return [rewritten, ...parts.slice(1)].join(" ");
+    })
+    .join(", ");
+}
+
+function rewriteHtml(html, baseUrl) {
+  let next = html;
+  next = next.replace(
+    /\s(href|src|action)=["']([^"']+)["']/gi,
+    (match, attr, value) => ` ${attr}="${rewriteUrl(value, baseUrl)}"`,
+  );
+  next = next.replace(
+    /\ssrcset=["']([^"']+)["']/gi,
+    (match, value) => ` srcset="${rewriteSrcset(value, baseUrl)}"`,
+  );
+  return injectDeoxyScript(next, baseUrl);
+}
+
+function injectDeoxyScript(html, baseUrl) {
+  const base = baseUrl.toString();
+  const script = `
+    <script>
+      (function() {
+        const base = new URL(${JSON.stringify(base)});
+        const prefix = "/deoxy?target=";
+        const skip = (url) => {
+          if (!url) return true;
+          return (
+            url.startsWith(prefix) ||
+            url.startsWith("data:") ||
+            url.startsWith("javascript:") ||
+            url.startsWith("mailto:") ||
+            url.startsWith("tel:") ||
+            url.startsWith("#")
+          );
+        };
+        const toDeoxy = (url) => {
+          if (!url || skip(url)) return url;
+          try {
+            const absolute = new URL(url, base);
+            return prefix + encodeURIComponent(absolute.toString());
+          } catch (error) {
+            return url;
+          }
+        };
+        document.addEventListener(
+          "click",
+          (event) => {
+            const anchor = event.target.closest("a[href]");
+            if (!anchor) return;
+            const href = anchor.getAttribute("href");
+            const next = toDeoxy(href);
+            if (next && next !== href) {
+              event.preventDefault();
+              window.location.assign(next);
+            }
+          },
+          true,
+        );
+        document.addEventListener(
+          "submit",
+          (event) => {
+            const form = event.target;
+            if (!form || !form.getAttribute) return;
+            const action = form.getAttribute("action") || base.toString();
+            const next = toDeoxy(action);
+            if (next && next !== action) {
+              form.setAttribute("action", next);
+            }
+          },
+          true,
+        );
+        ["pushState", "replaceState"].forEach((method) => {
+          const original = history[method];
+          history[method] = function(state, title, url) {
+            if (typeof url === "string") {
+              const next = toDeoxy(url);
+              return original.call(this, state, title, next || url);
+            }
+            return original.call(this, state, title, url);
+          };
+        });
+        if (window.fetch) {
+          const originalFetch = window.fetch.bind(window);
+          window.fetch = function(input, init) {
+            try {
+              if (typeof input === "string") {
+                const next = toDeoxy(input);
+                if (next && next !== input) {
+                  return originalFetch(next, init);
+                }
+              } else if (input && input.url) {
+                const next = toDeoxy(input.url);
+                if (next && next !== input.url) {
+                  return originalFetch(new Request(next, input), init);
+                }
+              }
+            } catch (error) {}
+            return originalFetch(input, init);
+          };
+        }
+        if (window.XMLHttpRequest) {
+          const originalOpen = XMLHttpRequest.prototype.open;
+          XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+            const next = toDeoxy(url);
+            return originalOpen.call(this, method, next || url, ...rest);
+          };
+        }
+      })();
+    </script>
+  `;
+
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/<head[^>]*>/i, (match) => `${match}${script}`);
+  }
+  if (/<body[^>]*>/i.test(html)) {
+    return html.replace(/<body[^>]*>/i, (match) => `${match}${script}`);
+  }
+  return `${script}${html}`;
+}
+
+function stripHeaders(headers) {
+  STRIP_RESPONSE_HEADERS.forEach((name) => {
+    if (headers[name]) delete headers[name];
+  });
+}
+
 function sendError(res, status, message) {
   res.writeHead(status, { "Content-Type": "text/plain; charset=utf-8" });
   res.end(message);
@@ -83,10 +248,34 @@ function handleDeoxy(req, res) {
       host: targetUrl.host,
     },
   };
+  options.headers["accept-encoding"] = "identity";
 
   const deoxyReq = client.request(options, (deoxyRes) => {
-    // Pass through status and headers.
-    res.writeHead(deoxyRes.statusCode || 500, deoxyRes.headers);
+    const status = deoxyRes.statusCode || 500;
+    const headers = { ...deoxyRes.headers };
+    stripHeaders(headers);
+
+    if (headers.location && REDIRECT_STATUSES.has(status)) {
+      headers.location = rewriteUrl(headers.location, targetUrl);
+    }
+
+    const contentType = headers["content-type"] || "";
+    if (contentType.includes("text/html")) {
+      let body = "";
+      deoxyRes.setEncoding("utf8");
+      deoxyRes.on("data", (chunk) => {
+        body += chunk;
+      });
+      deoxyRes.on("end", () => {
+        const rewritten = rewriteHtml(body, targetUrl);
+        headers["content-length"] = Buffer.byteLength(rewritten);
+        res.writeHead(status, headers);
+        res.end(rewritten);
+      });
+      return;
+    }
+
+    res.writeHead(status, headers);
     deoxyRes.pipe(res);
   });
 
@@ -121,4 +310,3 @@ server.listen(PORT, () => {
   console.log(`sfOS server running at http://localhost:${PORT}/`);
   console.log(`Deoxy endpoint available at http://localhost:${PORT}/deoxy?target=<url>`);
 });
-
