@@ -219,6 +219,7 @@ body.theme-dark .boot-screen {
   background: var(--surface-solid);
   padding: 6px 12px;
   border-radius: 12px;
+  color: var(--ink);
 }
 
 .control-center {
@@ -291,6 +292,8 @@ body.theme-dark .boot-screen {
   left: var(--x, 10%);
   top: var(--y, 10%);
   width: min(540px, 82vw);
+  display: flex;
+  flex-direction: column;
   background: var(--glass);
   border-radius: var(--radius);
   border: 1px solid var(--stroke);
@@ -375,6 +378,9 @@ body.theme-dark .window__resize {
 
 .window__content {
   padding: 18px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .deoxy-hero {
@@ -474,11 +480,12 @@ body.theme-dark .pill {
 .primary {
   border: none;
   background: var(--ink);
-  color: white;
+  color: var(--surface-solid);
   border-radius: 12px;
   padding: 10px 16px;
   font-weight: 600;
 }
+
 
 .browser-panel {
   margin-top: 14px;
@@ -824,14 +831,23 @@ body.theme-dark .calc-key.is-operator {
 .switch {
   position: relative;
   display: inline-block;
-  width: 48px;
-  height: 26px;
+  --switch-w: 48px;
+  --switch-h: 26px;
+  --switch-pad: 2px;
+  --knob: 22px;
+  width: var(--switch-w);
+  height: var(--switch-h);
+  min-width: var(--switch-w);
+  min-height: var(--switch-h);
+  flex: 0 0 auto;
   margin-top: 10px;
 }
 
 .switch.large {
-  width: 64px;
-  height: 34px;
+  --switch-w: 64px;
+  --switch-h: 34px;
+  --switch-pad: 3px;
+  --knob: 28px;
 }
 
 .switch input {
@@ -844,27 +860,23 @@ body.theme-dark .calc-key.is-operator {
   position: absolute;
   cursor: pointer;
   inset: 0;
-  background: rgba(27, 36, 48, 0.2);
+  background: var(--pill-bg);
   border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
   transition: 0.2s;
 }
 
 .slider::before {
   content: "";
   position: absolute;
-  height: 22px;
-  width: 22px;
-  left: 4px;
-  top: 2px;
-  background: white;
+  height: var(--knob);
+  width: var(--knob);
+  left: var(--switch-pad);
+  top: calc((var(--switch-h) - var(--knob)) / 2);
+  background: var(--pill-fg);
   border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
   transition: 0.2s;
-}
-
-.switch.large .slider::before {
-  width: 28px;
-  height: 28px;
-  top: 3px;
 }
 
 .switch input:checked + .slider {
@@ -872,11 +884,7 @@ body.theme-dark .calc-key.is-operator {
 }
 
 .switch input:checked + .slider::before {
-  transform: translateX(20px);
-}
-
-.switch.large input:checked + .slider::before {
-  transform: translateX(26px);
+  left: calc(100% - var(--knob) - var(--switch-pad));
 }
 
 .deoxy-off .status-dot {
