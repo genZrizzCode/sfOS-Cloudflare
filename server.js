@@ -88,7 +88,10 @@ function injectDeoxyScript(html, baseUrl) {
         };
         log("injected", window.location.href);
         try {
-          document.cookie = `sfos_deoxy_base=${encodeURIComponent(base.origin)}; Path=/; SameSite=Lax`;
+          document.cookie =
+            "sfos_deoxy_base=" +
+            encodeURIComponent(base.origin) +
+            "; Path=/; SameSite=Lax";
           log("cookie set", base.origin);
         } catch (error) {
           log("cookie set failed", error.message);
