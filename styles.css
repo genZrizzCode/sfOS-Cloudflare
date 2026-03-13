@@ -18,6 +18,15 @@
   --pill-fg: #ffffff;
   --terminal-bg: #0f1f2a;
   --terminal-fg: #e6f0f8;
+  --calc-key: #ffffff;
+  --calc-key-text: var(--ink);
+  --calc-utility: rgba(27, 36, 48, 0.08);
+  --calc-operator: rgba(255, 107, 74, 0.18);
+  --calc-equals: var(--ink);
+  --calc-equals-text: #ffffff;
+  --graph-axis: rgba(27, 36, 48, 0.2);
+  --graph-line: #ff6b4a;
+  --graph-bg: rgba(255, 255, 255, 0.7);
 }
 
 * {
@@ -26,11 +35,30 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+  font-family: -apple-system, "SF Pro Text", "SF Pro Display", "Google Sans Pro", "Google Sans", "Helvetica Neue", Arial, sans-serif;
   color: var(--ink);
   height: 100vh;
   overflow: hidden;
   background: radial-gradient(circle at top left, var(--bg-1), var(--bg-2));
+}
+
+h1 {
+  font-family: "SF Pro Display", "Google Sans Pro", "Google Sans", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-weight: 700;
+}
+
+.small-screen {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at top left, var(--bg-1), var(--bg-2));
+  color: var(--ink);
+  font-family: "SF Pro Display", "Google Sans Pro", "Google Sans", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-size: 18px;
+  padding: 40px;
+  text-align: center;
+  align-content: center;
+  z-index: 1000;
 }
 
 body::before {
@@ -59,6 +87,15 @@ body.theme-dark {
   --pill-fg: #f4f7fb;
   --terminal-bg: #0b111a;
   --terminal-fg: #e6f0f8;
+  --calc-key: #141e2a;
+  --calc-key-text: #f4f7fb;
+  --calc-utility: rgba(255, 255, 255, 0.12);
+  --calc-operator: rgba(255, 138, 91, 0.24);
+  --calc-equals: #ff8a5b;
+  --calc-equals-text: #1b2430;
+  --graph-axis: rgba(255, 255, 255, 0.2);
+  --graph-line: #ffb38f;
+  --graph-bg: rgba(18, 26, 38, 0.7);
 }
 
 body.theme-dark::before {
@@ -89,7 +126,7 @@ body.theme-dark .boot-screen {
 }
 
 .boot-logo {
-  font-family: "SF Pro Display", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-family: "SF Pro Display", "Google Sans Pro", "Google Sans", -apple-system, "Helvetica Neue", Arial, sans-serif;
   font-size: 32px;
   letter-spacing: 0.5px;
 }
@@ -263,6 +300,36 @@ body.theme-dark .boot-screen {
   animation: riseIn 0.6s ease;
 }
 
+.window__resize {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border-right: 2px solid rgba(0, 0, 0, 0.25);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.25);
+  opacity: 0.45;
+  cursor: se-resize;
+}
+
+body.theme-dark .window__resize {
+  border-right-color: rgba(255, 255, 255, 0.45);
+  border-bottom-color: rgba(255, 255, 255, 0.45);
+}
+
+.window.is-maximized {
+  left: 8px;
+  top: 56px;
+  width: calc(100% - 16px);
+  height: calc(100vh - 56px - 80px);
+}
+
+.window.is-maximized .window__content {
+  max-height: calc(100% - 52px);
+  overflow: auto;
+}
+
 .window.is-hidden {
   display: none;
 }
@@ -310,24 +377,24 @@ body.theme-dark .boot-screen {
   padding: 18px;
 }
 
-.proxy-hero {
+.deoxy-hero {
   display: flex;
   justify-content: space-between;
   gap: 18px;
   align-items: center;
 }
 
-.proxy-title {
-  font-family: "SF Pro Display", -apple-system, "Helvetica Neue", Arial, sans-serif;
+.deoxy-title {
+  font-family: "SF Pro Display", "Google Sans Pro", "Google Sans", -apple-system, "Helvetica Neue", Arial, sans-serif;
   font-size: 22px;
 }
 
-.proxy-copy {
+.deoxy-copy {
   margin-top: 6px;
   color: var(--muted);
 }
 
-.proxy-grid {
+.deoxy-grid {
   display: grid;
   gap: 14px;
   margin-top: 18px;
@@ -361,7 +428,7 @@ body.theme-dark .pill {
   color: #ffd1b3;
 }
 
-.proxy-logs {
+.deoxy-logs {
   margin-top: 20px;
   background: var(--surface-solid);
   border-radius: 16px;
@@ -466,9 +533,251 @@ body.theme-dark .pill {
   border-radius: 14px;
   border: 1px solid var(--stroke);
   padding: 12px;
-  font-family: -apple-system, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+  font-family: -apple-system, "SF Pro Text", "SF Pro Display", "Google Sans Pro", "Google Sans", "Helvetica Neue", Arial, sans-serif;
   background: var(--surface-solid);
   color: var(--ink);
+}
+
+.window--calc {
+  width: min(560px, 92vw);
+}
+
+.calculator {
+  display: grid;
+  gap: 14px;
+}
+
+.calc-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.calc-tab {
+  border: 1px solid var(--stroke);
+  background: var(--surface-solid);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.calc-tab.is-active {
+  background: var(--ink);
+  color: var(--surface-solid);
+}
+
+.calc-display {
+  background: var(--terminal-bg);
+  color: var(--terminal-fg);
+  border-radius: 16px;
+  padding: 14px;
+  text-align: right;
+  min-height: 84px;
+  display: grid;
+  align-content: center;
+}
+
+.calc-expression {
+  font-size: 12px;
+  color: var(--muted);
+  min-height: 16px;
+}
+
+.calc-result {
+  font-size: 32px;
+  font-weight: 600;
+  margin-top: 6px;
+}
+
+.calc-input-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+.calc-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.calculator[data-mode="graph"] .calc-input-row,
+.calculator[data-mode="convert"] .calc-input-row,
+.calculator[data-mode="settings"] .calc-input-row {
+  display: none;
+}
+
+.calc-panels {
+  display: grid;
+}
+
+.calc-panel {
+  display: none;
+}
+
+.calc-panel.is-active {
+  display: block;
+}
+
+.calc-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.calc-grid--scientific {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.calc-key {
+  border: 1px solid var(--stroke);
+  background: var(--calc-key);
+  color: var(--calc-key-text);
+  border-radius: 14px;
+  padding: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.calc-key.is-utility {
+  background: var(--calc-utility);
+}
+
+.calc-key.is-operator {
+  background: var(--calc-operator);
+  color: #8f3d2c;
+}
+
+body.theme-dark .calc-key.is-operator {
+  color: #ffd1b3;
+}
+
+.calc-key.is-fn {
+  font-size: 13px;
+}
+
+.calc-key.is-equals {
+  background: var(--calc-equals);
+  color: var(--calc-equals-text);
+}
+
+.calc-key.is-wide {
+  grid-column: span 2;
+}
+
+.graph-form {
+  display: grid;
+  gap: 10px;
+}
+
+.graph-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.graph-status {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.graph-canvas {
+  background: var(--graph-bg);
+  border-radius: 14px;
+  border: 1px solid var(--stroke);
+  padding: 8px;
+}
+
+.graph-canvas svg {
+  width: 100%;
+  height: 220px;
+}
+
+.graph-canvas svg .graph-axis {
+  stroke: var(--graph-axis);
+  stroke-width: 1;
+}
+
+.graph-canvas svg .graph-line {
+  fill: none;
+  stroke: var(--graph-line);
+  stroke-width: 2;
+}
+
+
+.graph-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.convert-row {
+  display: grid;
+  gap: 6px;
+}
+
+.convert-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.convert-output {
+  background: var(--surface-solid);
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  padding: 10px 12px;
+  font-weight: 600;
+}
+
+.convert-rate {
+  margin-top: 10px;
+}
+
+.convert-note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.settings-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-card {
+  background: var(--surface-solid);
+  border-radius: 14px;
+  border: 1px solid var(--stroke);
+  padding: 12px;
+}
+
+.settings-title {
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--stroke);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.segmented__button {
+  border: none;
+  background: transparent;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.segmented__button.is-active {
+  background: var(--ink);
+  color: var(--surface-solid);
 }
 
 .dock {
@@ -570,12 +879,12 @@ body.theme-dark .pill {
   transform: translateX(26px);
 }
 
-.proxy-off .status-dot {
+.deoxy-off .status-dot {
   background: #ff9250;
   box-shadow: 0 0 10px rgba(255, 146, 80, 0.6);
 }
 
-.proxy-off .status-text {
+.deoxy-off .status-text {
   color: #8a4a2d;
 }
 
@@ -629,6 +938,14 @@ body.theme-dark .pill {
 
   .dock {
     position: fixed;
+  }
+
+  .small-screen {
+    display: grid;
+  }
+
+  .desktop {
+    display: none;
   }
 }
 

@@ -1,6 +1,6 @@
 # sfOS Prototype
 
-This project is a macOS-inspired web OS concept with a built-in proxy layer. The UI includes a dock, menu bar, draggable windows, and a Proxy Center that simulates system-wide routing.
+This project is a macOS-inspired web OS concept with a built-in deoxy layer. The UI includes a dock, menu bar, draggable windows, and a Deoxy Center that simulates system-wide routing.
 
 ## Open locally (static demo)
 
@@ -10,16 +10,16 @@ Open `index.html` directly in a browser, or run a local server:
 
 Then visit `http://localhost:5173`.
 
-## Deploy to Cloudflare Pages (with proxy)
+## Deploy to Cloudflare Pages (with deoxy)
 
 sfOS can run on Cloudflare Pages so visitors don’t need to run any console commands.
 
 ### Structure
 
 - Static files: `index.html`, `styles.css`, `app.js`, etc.
-- Proxy function: `functions/proxy.js` (Cloudflare Pages Function).
+- Deoxy function: `functions/deoxy.js` (Cloudflare Pages Function).
 
-The Nebula Tunnel window uses a relative endpoint: `/proxy?target=...`, which will be handled by `functions/proxy.js`.
+The Nebula Tunnel window uses a relative endpoint: `/deoxy?target=...`, which will be handled by `functions/deoxy.js`.
 
 ### Basic deployment steps
 
@@ -35,9 +35,9 @@ Once deployed:
 
 - Visit your `*.pages.dev` URL (or custom domain).
 - Open **Nebula Tunnel** inside sfOS, enter a site (e.g. `example.com`), and click **Tunnel**.
-- A new tab will open at `/proxy?target=...` on your Pages domain, streaming the real site via the Cloudflare Pages Function.
+- A new tab will open at `/deoxy?target=...` on your Pages domain, streaming the real site via the Cloudflare Pages Function.
 
 ## Notes
 
-- Proxy routing is simulated in `app.js` to keep the prototype self-contained.
-- Update the endpoint, mode, and toggle in the Proxy Center to see changes reflected across the UI.
+- Deoxy routing is simulated in `app.js` to keep the prototype self-contained.
+- Update the endpoint, mode, and toggle in the Deoxy Center to see changes reflected across the UI.

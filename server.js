@@ -48,7 +48,7 @@ function serveStatic(req, res) {
   });
 }
 
-function handleProxy(req, res) {
+function handleDeoxy(req, res) {
   const parsed = url.parse(req.url, true);
   const target = parsed.query.target;
 
@@ -84,14 +84,14 @@ function handleProxy(req, res) {
     },
   };
 
-  const proxyReq = client.request(options, (proxyRes) => {
+  const deoxyReq = client.request(options, (deoxyRes) => {
     // Pass through status and headers.
-    res.writeHead(proxyRes.statusCode || 500, proxyRes.headers);
-    proxyRes.pipe(res);
+    res.writeHead(deoxyRes.statusCode || 500, deoxyRes.headers);
+    deoxyRes.pipe(res);
   });
 
-  proxyReq.on("error", (error) => {
-    console.error("Proxy error:", error.message);
+  deoxyReq.on("error", (error) => {
+    console.error("Deoxy error:", error.message);
     if (!res.headersSent) {
       sendError(res, 502, "Upstream request failed");
     } else {
@@ -100,9 +100,9 @@ function handleProxy(req, res) {
   });
 
   if (req.method === "POST" || req.method === "PUT" || req.method === "PATCH") {
-    req.pipe(proxyReq);
+    req.pipe(deoxyReq);
   } else {
-    proxyReq.end();
+    deoxyReq.end();
   }
 }
 
@@ -110,8 +110,8 @@ const server = http.createServer((req, res) => {
   const parsed = url.parse(req.url);
   const pathname = parsed.pathname || "/";
 
-  if (pathname === "/proxy") {
-    handleProxy(req, res);
+  if (pathname === "/deoxy") {
+    handleDeoxy(req, res);
   } else {
     serveStatic(req, res);
   }
@@ -119,6 +119,6 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log(`sfOS server running at http://localhost:${PORT}/`);
-  console.log(`Proxy endpoint available at http://localhost:${PORT}/proxy?target=<url>`);
+  console.log(`Deoxy endpoint available at http://localhost:${PORT}/deoxy?target=<url>`);
 });
 

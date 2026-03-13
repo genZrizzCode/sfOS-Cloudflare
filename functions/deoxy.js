@@ -22,8 +22,8 @@ export async function onRequest({ request }) {
   const hopByHopHeaders = [
     "connection",
     "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
+    "deoxy-authenticate",
+    "deoxy-authorization",
     "te",
     "trailers",
     "transfer-encoding",
