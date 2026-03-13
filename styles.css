@@ -35,7 +35,7 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, "SF Pro Text", "SF Pro Display", "Google Sans Pro", "Google Sans", "Helvetica Neue", Arial, sans-serif;
+  font-family: -apple-system, "SF Compact", "Google Sans Pro", "Google Sans", "Helvetica Neue", Arial, sans-serif;
   color: var(--ink);
   height: 100vh;
   overflow: hidden;
@@ -43,7 +43,7 @@ body {
 }
 
 h1 {
-  font-family: "SF Pro Display", "Google Sans Pro", "Google Sans", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-family: "SF Pro", "Google Sans Pro", "Google Sans", -apple-system, "Helvetica Neue", Arial, sans-serif;
   font-weight: 700;
 }
 
@@ -53,7 +53,7 @@ h1 {
   inset: 0;
   background: radial-gradient(circle at top left, var(--bg-1), var(--bg-2));
   color: var(--ink);
-  font-family: "SF Pro Display", "Google Sans Pro", "Google Sans", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-family: "SF Pro", "Google Sans Pro", "Google Sans", -apple-system, "Helvetica Neue", Arial, sans-serif;
   font-size: 18px;
   padding: 40px;
   text-align: center;
@@ -126,7 +126,7 @@ body.theme-dark .boot-screen {
 }
 
 .boot-logo {
-  font-family: "SF Pro Display", "Google Sans Pro", "Google Sans", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-family: "SF Pro", "Google Sans Pro", "Google Sans", -apple-system, "Helvetica Neue", Arial, sans-serif;
   font-size: 32px;
   letter-spacing: 0.5px;
 }
@@ -391,7 +391,7 @@ body.theme-dark .window__resize {
 }
 
 .deoxy-title {
-  font-family: "SF Pro Display", "Google Sans Pro", "Google Sans", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-family: "SF Pro", "Google Sans Pro", "Google Sans", -apple-system, "Helvetica Neue", Arial, sans-serif;
   font-size: 22px;
 }
 
@@ -545,7 +545,7 @@ body.theme-dark .pill {
   border-radius: 14px;
   border: 1px solid var(--stroke);
   padding: 12px;
-  font-family: -apple-system, "SF Pro Text", "SF Pro Display", "Google Sans Pro", "Google Sans", "Helvetica Neue", Arial, sans-serif;
+  font-family: -apple-system, "SF Compact", "Google Sans Pro", "Google Sans", "Helvetica Neue", Arial, sans-serif;
   background: var(--surface-solid);
   color: var(--ink);
 }
