@@ -121,9 +121,24 @@ function injectDeoxyScript(html, baseUrl) {
         const base = new URL(${JSON.stringify(base)});
         const prefix = "/deoxy?target=";
         const debug = true;
-        const log = (...args) => {
-          if (debug) console.log("[deoxy]", ...args);
+        const logStore = [];
+        const writeLog = (level, ...args) => {
+          try {
+            logStore.push({ level, message: args.map(String).join(" "), ts: Date.now() });
+            if (logStore.length > 200) logStore.shift();
+            window.__deoxyLogs = logStore;
+          } catch (error) {}
+          if (!debug) return;
+          try {
+            const handler =
+              (console && console[level] && console[level].bind(console)) ||
+              (console && console.log && console.log.bind(console));
+            if (handler) handler("[deoxy]", ...args);
+          } catch (error) {}
         };
+        const log = (...args) => writeLog("log", ...args);
+        const nativePushState = history.pushState.bind(history);
+        const nativeReplaceState = history.replaceState.bind(history);
         log("injected", window.location.href);
         try {
           document.cookie =
@@ -166,6 +181,22 @@ function injectDeoxyScript(html, baseUrl) {
             log(label, url, "->", next);
           }
           return next;
+        };
+        const ensureDeoxyUrl = (reason) => {
+          try {
+            if (window.location.pathname.startsWith("/deoxy")) return;
+            const current = new URL(window.location.href);
+            if (current.origin !== window.location.origin) return;
+            const target = new URL(
+              current.pathname + current.search + current.hash,
+              base,
+            );
+            const next = prefix + encodeURIComponent(target.toString());
+            log("guard", reason, current.href, "->", next);
+            nativeReplaceState({}, "", next);
+          } catch (error) {
+            log("guard failed", error.message);
+          }
         };
         const rewriteSrcsetValue = (value) => {
           if (!value) return value;
@@ -281,13 +312,18 @@ function injectDeoxyScript(html, baseUrl) {
           log("location override failed", error.message);
         }
         ["pushState", "replaceState"].forEach((method) => {
-          const original = history[method];
+          const original =
+            method === "pushState" ? nativePushState : nativeReplaceState;
           history[method] = function(state, title, url) {
             if (typeof url === "string") {
               const next = rewriteIfNeeded(url, "history." + method);
-              return original.call(this, state, title, next || url);
+              const result = original.call(this, state, title, next || url);
+              ensureDeoxyUrl("history." + method);
+              return result;
             }
-            return original.call(this, state, title, url);
+            const result = original.call(this, state, title, url);
+            ensureDeoxyUrl("history." + method);
+            return result;
           };
         });
         if (window.fetch) {
@@ -317,6 +353,10 @@ function injectDeoxyScript(html, baseUrl) {
           };
         }
         scan(document);
+        ensureDeoxyUrl("init");
+        window.addEventListener("popstate", () => ensureDeoxyUrl("popstate"));
+        window.addEventListener("hashchange", () => ensureDeoxyUrl("hashchange"));
+        window.setInterval(() => ensureDeoxyUrl("interval"), 1500);
         try {
           const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
