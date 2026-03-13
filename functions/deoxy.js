@@ -61,6 +61,10 @@ function injectDeoxyScript(html, baseUrl) {
       (function() {
         const base = new URL(${JSON.stringify(base)});
         const prefix = "/deoxy?target=";
+        const debug = true;
+        const log = (...args) => {
+          if (debug) console.log("[deoxy]", ...args);
+        };
         const skip = (url) => {
           if (!url) return true;
           return (
@@ -81,13 +85,20 @@ function injectDeoxyScript(html, baseUrl) {
             return url;
           }
         };
+        const rewriteIfNeeded = (url, label) => {
+          const next = toDeoxy(url);
+          if (next && next !== url) {
+            log(label, url, "->", next);
+          }
+          return next;
+        };
         document.addEventListener(
           "click",
           (event) => {
             const anchor = event.target.closest("a[href]");
             if (!anchor) return;
             const href = anchor.getAttribute("href");
-            const next = toDeoxy(href);
+            const next = rewriteIfNeeded(href, "navigate");
             if (next && next !== href) {
               event.preventDefault();
               window.location.assign(next);
@@ -101,18 +112,36 @@ function injectDeoxyScript(html, baseUrl) {
             const form = event.target;
             if (!form || !form.getAttribute) return;
             const action = form.getAttribute("action") || base.toString();
-            const next = toDeoxy(action);
+            const next = rewriteIfNeeded(action, "submit");
             if (next && next !== action) {
               form.setAttribute("action", next);
             }
           },
           true,
         );
+        try {
+          if (window.location && window.location.assign) {
+            const originalAssign = window.location.assign.bind(window.location);
+            window.location.assign = function(url) {
+              const next = rewriteIfNeeded(url, "location.assign");
+              return originalAssign(next || url);
+            };
+          }
+          if (window.location && window.location.replace) {
+            const originalReplace = window.location.replace.bind(window.location);
+            window.location.replace = function(url) {
+              const next = rewriteIfNeeded(url, "location.replace");
+              return originalReplace(next || url);
+            };
+          }
+        } catch (error) {
+          log("location override failed", error.message);
+        }
         ["pushState", "replaceState"].forEach((method) => {
           const original = history[method];
           history[method] = function(state, title, url) {
             if (typeof url === "string") {
-              const next = toDeoxy(url);
+              const next = rewriteIfNeeded(url, "history." + method);
               return original.call(this, state, title, next || url);
             }
             return original.call(this, state, title, url);
@@ -123,12 +152,12 @@ function injectDeoxyScript(html, baseUrl) {
           window.fetch = function(input, init) {
             try {
               if (typeof input === "string") {
-                const next = toDeoxy(input);
+                const next = rewriteIfNeeded(input, "fetch");
                 if (next && next !== input) {
                   return originalFetch(next, init);
                 }
               } else if (input && input.url) {
-                const next = toDeoxy(input.url);
+                const next = rewriteIfNeeded(input.url, "fetch");
                 if (next && next !== input.url) {
                   return originalFetch(new Request(next, input), init);
                 }
@@ -140,7 +169,7 @@ function injectDeoxyScript(html, baseUrl) {
         if (window.XMLHttpRequest) {
           const originalOpen = XMLHttpRequest.prototype.open;
           XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-            const next = toDeoxy(url);
+            const next = rewriteIfNeeded(url, "xhr");
             return originalOpen.call(this, method, next || url, ...rest);
           };
         }
@@ -179,6 +208,8 @@ export async function onRequest({ request }) {
   if (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") {
     return new Response("Only http and https are supported", { status: 400 });
   }
+
+  console.log("[deoxy] request", targetUrl.toString());
 
   const requestHeaders = new Headers(request.headers);
   // Remove hop-by-hop and Cloudflare-specific headers that should not be forwarded.
@@ -220,6 +251,11 @@ export async function onRequest({ request }) {
   // Avoid setting forbidden headers back to the client.
   hopByHopHeaders.forEach((h) => responseHeaders.delete(h));
   stripHeaders(responseHeaders);
+
+  responseHeaders.append(
+    "set-cookie",
+    `sfos_deoxy_base=${encodeURIComponent(targetUrl.origin)}; Path=/; SameSite=Lax`,
+  );
 
   if (responseHeaders.has("location") && REDIRECT_STATUSES.has(upstreamResponse.status)) {
     responseHeaders.set(
