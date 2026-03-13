@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sfOS</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="boot-screen" id="boot">
+      <div class="boot-card">
+        <div class="boot-logo">sfOS</div>
+        <div class="boot-sub">Proxy-first. Calm by design.</div>
+        <div class="boot-bar">
+          <span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="desktop" id="desktop">
+      <header class="menu-bar">
+        <div class="menu-left">
+          <button class="menu-pill">sfOS</button>
+          <button class="menu-ghost">File</button>
+          <button class="menu-ghost">View</button>
+          <button class="menu-ghost">Window</button>
+        </div>
+        <div class="menu-right">
+          <div class="status">
+            <span class="status-dot" data-proxy-dot></span>
+            <span class="status-text" data-proxy-label>Proxy On</span>
+          </div>
+          <span class="status-text">Wi-Fi</span>
+          <span class="status-text">Battery 86%</span>
+          <span class="status-time" data-time></span>
+          <button class="control-toggle" data-control-toggle>Control</button>
+        </div>
+      </header>
+
+      <aside class="control-center" data-control-center>
+        <div class="control-header">Control Center</div>
+        <div class="control-grid">
+          <div class="control-card">
+            <div class="control-title">Proxy Shield</div>
+            <label class="switch">
+              <input type="checkbox" data-proxy-toggle />
+              <span class="slider"></span>
+            </label>
+            <div class="control-sub" data-proxy-sub>Smart routing enabled</div>
+          </div>
+          <div class="control-card">
+            <div class="control-title">Mode</div>
+            <select class="control-select" data-proxy-mode>
+              <option value="Smart">Smart</option>
+              <option value="Manual">Manual</option>
+              <option value="Bypass">Bypass</option>
+            </select>
+            <div class="control-sub">Switch routes instantly</div>
+          </div>
+          <div class="control-card">
+            <div class="control-title">Appearance</div>
+            <label class="switch">
+              <input type="checkbox" data-theme-toggle />
+              <span class="slider"></span>
+            </label>
+            <div class="control-sub">Dark mode</div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <div class="window" data-app="proxy" style="--x: 8%; --y: 12%;">
+          <div class="window__titlebar">
+            <div class="window__traffic">
+              <button class="traffic red" data-close="proxy" aria-label="Close"></button>
+              <button class="traffic yellow" data-minimize="proxy" aria-label="Minimize"></button>
+              <button class="traffic green" data-maximize="proxy" aria-label="Zoom"></button>
+            </div>
+            <div class="window__title">Proxy Center</div>
+          </div>
+          <div class="window__content">
+            <div class="proxy-hero">
+              <div>
+                <div class="proxy-title">Always-on secure routing</div>
+                <div class="proxy-copy">
+                  sfOS routes system traffic through a built-in proxy layer with
+                  smart failover and low-latency hops.
+                </div>
+              </div>
+              <label class="switch large">
+                <input type="checkbox" data-proxy-toggle />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="proxy-grid">
+              <div>
+                <label class="field-label">Proxy endpoint</label>
+                <input
+                  class="field"
+                  type="text"
+                  value="localhost:8443"
+                  data-proxy-endpoint
+                />
+              </div>
+              <div>
+                <label class="field-label">Routing mode</label>
+                <select class="field" data-proxy-mode>
+                  <option value="Smart">Smart</option>
+                  <option value="Manual">Manual</option>
+                  <option value="Bypass">Bypass</option>
+                </select>
+              </div>
+              <div>
+                <label class="field-label">Policy</label>
+                <div class="pill">Private Relay + Zero DNS leak</div>
+              </div>
+            </div>
+            <div class="proxy-logs">
+              <div class="logs-header">
+                <span>Live session</span>
+                <button class="ghost" data-run-test>Run handshake</button>
+              </div>
+              <div class="logs-body" data-log></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="window" data-app="browser" style="--x: 45%; --y: 10%;">
+          <div class="window__titlebar">
+            <div class="window__traffic">
+              <button class="traffic red" data-close="browser" aria-label="Close"></button>
+              <button class="traffic yellow" data-minimize="browser" aria-label="Minimize"></button>
+              <button class="traffic green" data-maximize="browser" aria-label="Zoom"></button>
+            </div>
+            <div class="window__title">Nova Browser</div>
+          </div>
+          <div class="window__content">
+            <form class="browser-bar" data-browser-form>
+              <input
+                class="field"
+                type="text"
+                value="https://sfos.local/launch"
+                data-browser-input
+              />
+              <button class="primary">Go</button>
+            </form>
+            <div class="browser-panel">
+              <div class="browser-status" data-browser-status>Ready to navigate.</div>
+              <div class="browser-output" data-browser-output>
+                No active session.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="window" data-app="tunnel" style="--x: 55%; --y: 28%;">
+          <div class="window__titlebar">
+            <div class="window__traffic">
+              <button class="traffic red" data-close="tunnel" aria-label="Close"></button>
+              <button class="traffic yellow" data-minimize="tunnel" aria-label="Minimize"></button>
+              <button class="traffic green" data-maximize="tunnel" aria-label="Zoom"></button>
+            </div>
+            <div class="window__title">Nebula Tunnel</div>
+          </div>
+          <div class="window__content">
+            <form class="browser-bar" data-tunnel-form>
+              <input
+                class="field"
+                type="text"
+                placeholder="Enter a site to tunnel"
+                data-tunnel-input
+              />
+              <button class="primary">Tunnel</button>
+            </form>
+            <div class="browser-panel">
+              <div class="browser-status" data-tunnel-status>Idle. No tunnel created.</div>
+              <div class="browser-output" data-tunnel-output>
+                When active, traffic is chained through sfOS proxy hops before exiting.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="window" data-app="monitor" style="--x: 18%; --y: 58%;">
+          <div class="window__titlebar">
+            <div class="window__traffic">
+              <button class="traffic red" data-close="monitor" aria-label="Close"></button>
+              <button class="traffic yellow" data-minimize="monitor" aria-label="Minimize"></button>
+              <button class="traffic green" data-maximize="monitor" aria-label="Zoom"></button>
+            </div>
+            <div class="window__title">Pulse Monitor</div>
+          </div>
+          <div class="window__content">
+            <div class="monitor-grid">
+              <div class="metric">
+                <div class="metric-label">Proxy state</div>
+                <div class="metric-value" data-metric-proxy>Enabled</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Latency</div>
+                <div class="metric-value" data-metric-latency>24 ms</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Uptime</div>
+                <div class="metric-value" data-metric-uptime>00:00:00</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Session key</div>
+                <div class="metric-value">LUM-4F2A-99</div>
+              </div>
+            </div>
+            <div class="monitor-note">
+              System routing is applied across apps, background sync, and secure relay.
+            </div>
+          </div>
+        </div>
+
+        <div class="window" data-app="studio" style="--x: 60%; --y: 52%;">
+          <div class="window__titlebar">
+            <div class="window__traffic">
+              <button class="traffic red" data-close="studio" aria-label="Close"></button>
+              <button class="traffic yellow" data-minimize="studio" aria-label="Minimize"></button>
+              <button class="traffic green" data-maximize="studio" aria-label="Zoom"></button>
+            </div>
+            <div class="window__title">Studio Notes</div>
+          </div>
+          <div class="window__content">
+            <textarea class="notes">
+Design cues:
+- Soft depth, glass surfaces, warm daylight.
+- Proxy visible but calm: always-on, no drama.
+- Dock-first navigation.
+            </textarea>
+          </div>
+        </div>
+      </main>
+
+      <nav class="dock">
+        <button class="dock__button" data-open="proxy">
+          <span class="dock__icon">P</span>
+          <span class="dock__label">Proxy</span>
+        </button>
+        <button class="dock__button" data-open="browser">
+          <span class="dock__icon">N</span>
+          <span class="dock__label">Browser</span>
+        </button>
+        <button class="dock__button" data-open="tunnel">
+          <span class="dock__icon">T</span>
+          <span class="dock__label">Tunnel</span>
+        </button>
+        <button class="dock__button" data-open="studio">
+          <span class="dock__icon">S</span>
+          <span class="dock__label">Studio</span>
+        </button>
+        <button class="dock__button" data-open="monitor">
+          <span class="dock__icon">M</span>
+          <span class="dock__label">Monitor</span>
+        </button>
+      </nav>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
