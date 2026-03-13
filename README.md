@@ -1,4 +1,4 @@
-# <span style="font-family: 'SF Pro Display', sans-serif;">sfOS</span>
+# <span style="font-family: 'SF Pro', sans-serif;">sfOS</span>
 
 This project is a macOS-inspired web OS concept with a built-in deoxy layer. The UI includes a dock, menu bar, draggable windows, and a Deoxy Center that simulates system-wide routing.
 
