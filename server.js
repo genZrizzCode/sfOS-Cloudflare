@@ -86,6 +86,13 @@ function injectDeoxyScript(html, baseUrl) {
         const log = (...args) => {
           if (debug) console.log("[deoxy]", ...args);
         };
+        log("injected", window.location.href);
+        try {
+          document.cookie = `sfos_deoxy_base=${encodeURIComponent(base.origin)}; Path=/; SameSite=Lax`;
+          log("cookie set", base.origin);
+        } catch (error) {
+          log("cookie set failed", error.message);
+        }
         const skip = (url) => {
           if (!url) return true;
           return (
@@ -113,6 +120,58 @@ function injectDeoxyScript(html, baseUrl) {
           }
           return next;
         };
+        const rewriteSrcsetValue = (value) => {
+          if (!value) return value;
+          return value
+            .split(",")
+            .map((entry) => {
+              const parts = entry.trim().split(/\\s+/);
+              if (!parts.length) return entry;
+              const rewritten = toDeoxy(parts[0]);
+              return [rewritten || parts[0], ...parts.slice(1)].join(" ");
+            })
+            .join(", ");
+        };
+        const rewriteAttribute = (el, attr) => {
+          if (!el || !el.getAttribute) return;
+          const value = el.getAttribute(attr);
+          if (!value) return;
+          const next = toDeoxy(value);
+          if (next && next !== value) {
+            el.setAttribute(attr, next);
+          }
+        };
+        const rewriteElement = (el) => {
+          if (!el || !el.getAttribute) return;
+          if (el.hasAttribute("href")) rewriteAttribute(el, "href");
+          if (el.hasAttribute("src")) rewriteAttribute(el, "src");
+          if (el.hasAttribute("action")) rewriteAttribute(el, "action");
+          if (el.hasAttribute("srcset")) {
+            const value = el.getAttribute("srcset");
+            const next = rewriteSrcsetValue(value);
+            if (next && next !== value) {
+              el.setAttribute("srcset", next);
+            }
+          }
+        };
+        const rewriteFormAction = (form, label) => {
+          if (!form || !form.getAttribute) return;
+          const action = form.getAttribute("action") || base.toString();
+          const next = rewriteIfNeeded(action, label || "form.action");
+          if (next && next !== action) {
+            form.setAttribute("action", next);
+          }
+        };
+        const scan = (root) => {
+          if (!root) return;
+          if (root.nodeType === 1) rewriteElement(root);
+          if (!root.querySelectorAll) return;
+          root
+            .querySelectorAll(
+              "a[href], form[action], link[href], script[src], img[src], iframe[src], source[src], video[src], audio[src]",
+            )
+            .forEach((el) => rewriteElement(el));
+        };
         document.addEventListener(
           "click",
           (event) => {
@@ -132,14 +191,30 @@ function injectDeoxyScript(html, baseUrl) {
           (event) => {
             const form = event.target;
             if (!form || !form.getAttribute) return;
-            const action = form.getAttribute("action") || base.toString();
-            const next = rewriteIfNeeded(action, "submit");
-            if (next && next !== action) {
-              form.setAttribute("action", next);
-            }
+            rewriteFormAction(form, "submit");
           },
           true,
         );
+        try {
+          const originalSubmit = HTMLFormElement.prototype.submit;
+          HTMLFormElement.prototype.submit = function(...args) {
+            rewriteFormAction(this, "form.submit");
+            return originalSubmit.apply(this, args);
+          };
+        } catch (error) {
+          log("form.submit override failed", error.message);
+        }
+        try {
+          const originalRequestSubmit = HTMLFormElement.prototype.requestSubmit;
+          if (originalRequestSubmit) {
+            HTMLFormElement.prototype.requestSubmit = function(...args) {
+              rewriteFormAction(this, "form.requestSubmit");
+              return originalRequestSubmit.apply(this, args);
+            };
+          }
+        } catch (error) {
+          log("form.requestSubmit override failed", error.message);
+        }
         try {
           if (window.location && window.location.assign) {
             const originalAssign = window.location.assign.bind(window.location);
@@ -194,6 +269,32 @@ function injectDeoxyScript(html, baseUrl) {
             return originalOpen.call(this, method, next || url, ...rest);
           };
         }
+        scan(document);
+        try {
+          const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+              if (mutation.type === "attributes") {
+                rewriteElement(mutation.target);
+                return;
+              }
+              if (mutation.type === "childList") {
+                mutation.addedNodes.forEach((node) => {
+                  if (node.nodeType !== 1) return;
+                  rewriteElement(node);
+                  scan(node);
+                });
+              }
+            });
+          });
+          observer.observe(document.documentElement, {
+            subtree: true,
+            childList: true,
+            attributes: true,
+            attributeFilter: ["href", "src", "action", "srcset"],
+          });
+        } catch (error) {
+          log("mutation observer failed", error.message);
+        }
       })();
     </script>
   `;
@@ -228,10 +329,16 @@ function parseCookies(header = "") {
   return cookies;
 }
 
+function isNavigationRequest(req) {
+  const accept = req.headers.accept || "";
+  const dest = (req.headers["sec-fetch-dest"] || "").toLowerCase();
+  const mode = (req.headers["sec-fetch-mode"] || "").toLowerCase();
+  return accept.includes("text/html") || dest === "document" || mode === "navigate";
+}
+
 function maybeRedirectDeoxy(req, res) {
   if (req.method !== "GET") return false;
-  const accept = req.headers.accept || "";
-  if (!accept.includes("text/html")) return false;
+  if (!isNavigationRequest(req)) return false;
   const referer = req.headers.referer || req.headers.referrer;
   if (!referer) return false;
   try {
@@ -257,8 +364,7 @@ function maybeRedirectDeoxy(req, res) {
 
 function maybeRedirectDeoxyFromCookie(req, res) {
   if (req.method !== "GET") return false;
-  const accept = req.headers.accept || "";
-  if (!accept.includes("text/html")) return false;
+  if (!isNavigationRequest(req)) return false;
   const parsed = url.parse(req.url);
   if ((parsed.pathname || "").includes(".")) return false;
   const cookies = parseCookies(req.headers.cookie || "");

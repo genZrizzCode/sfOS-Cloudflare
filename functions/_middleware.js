@@ -6,8 +6,14 @@ export async function onRequest(context) {
     return next();
   }
 
+  if (request.method !== "GET") {
+    return next();
+  }
   const accept = request.headers.get("accept") || "";
-  if (!accept.includes("text/html") || request.method !== "GET") {
+  const dest = (request.headers.get("sec-fetch-dest") || "").toLowerCase();
+  const mode = (request.headers.get("sec-fetch-mode") || "").toLowerCase();
+  const isNavigation = accept.includes("text/html") || dest === "document" || mode === "navigate";
+  if (!isNavigation) {
     return next();
   }
 
