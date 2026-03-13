@@ -189,6 +189,29 @@ function sendError(res, status, message) {
   res.end(message);
 }
 
+function maybeRedirectDeoxy(req, res) {
+  if (req.method !== "GET") return false;
+  const referer = req.headers.referer || req.headers.referrer;
+  if (!referer) return false;
+  try {
+    const refUrl = new URL(referer);
+    const target = refUrl.searchParams.get("target");
+    if (!target) return false;
+    const targetUrl = new URL(target);
+    const requestUrl = new URL(req.url, `http://${req.headers.host}`);
+    const nextTarget = new URL(
+      `${requestUrl.pathname}${requestUrl.search}`,
+      targetUrl,
+    );
+    const redirect = `/deoxy?target=${encodeURIComponent(nextTarget.toString())}`;
+    res.writeHead(302, { Location: redirect });
+    res.end();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function serveStatic(req, res) {
   const parsed = url.parse(req.url);
   let pathname = parsed.pathname || "/";
@@ -301,6 +324,8 @@ const server = http.createServer((req, res) => {
 
   if (pathname === "/deoxy") {
     handleDeoxy(req, res);
+  } else if (maybeRedirectDeoxy(req, res)) {
+    return;
   } else {
     serveStatic(req, res);
   }
