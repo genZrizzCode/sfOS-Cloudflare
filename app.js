@@ -160,6 +160,18 @@ const initNetworkClock = () => {
   }, 10 * 60 * 1000);
 };
 
+let batteryState = null;
+let latencyTimer = null;
+let latencyInFlight = false;
+
+const isLowPowerMode = () => {
+  if (!batteryState) return false;
+  if (batteryState.charging) return false;
+  return batteryState.level <= 0.2;
+};
+
+const getLatencyInterval = () => (isLowPowerMode() ? 20000 : 5000);
+
 const updateBatteryDisplay = (battery) => {
   if (!batteryEl || !battery) return;
   const percent = Math.round(battery.level * 100);
@@ -177,8 +189,13 @@ const initBattery = () => {
   navigator
     .getBattery()
     .then((battery) => {
+      batteryState = battery;
       updateBatteryDisplay(battery);
-      const handler = () => updateBatteryDisplay(battery);
+      const handler = () => {
+        batteryState = battery;
+        updateBatteryDisplay(battery);
+        scheduleLatency(true);
+      };
       battery.addEventListener("levelchange", handler);
       battery.addEventListener("chargingchange", handler);
     })
@@ -201,6 +218,8 @@ const initNetworkStatus = () => {
 
 const measureLatency = async () => {
   if (!metricLatency) return null;
+  if (latencyInFlight) return null;
+  latencyInFlight = true;
   const start = typeof performance !== "undefined" ? performance.now() : Date.now();
   try {
     const response = await fetch(`/ping?ts=${Date.now()}`, { cache: "no-store" });
@@ -212,15 +231,27 @@ const measureLatency = async () => {
   } catch (error) {
     metricLatency.textContent = "—";
     return null;
+  } finally {
+    latencyInFlight = false;
   }
 };
 
+const scheduleLatency = (immediate = false) => {
+  if (latencyTimer) {
+    window.clearTimeout(latencyTimer);
+  }
+  const delay = immediate ? 0 : getLatencyInterval();
+  latencyTimer = window.setTimeout(async () => {
+    await measureLatency();
+    scheduleLatency();
+  }, delay);
+};
+
 const startLatencyMonitor = () => {
-  measureLatency();
-  window.setInterval(measureLatency, 15000);
+  scheduleLatency(true);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
-      measureLatency();
+      scheduleLatency(true);
     }
   });
 };
