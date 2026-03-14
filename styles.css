@@ -473,6 +473,7 @@ body.theme-dark .pill {
   padding: 6px 10px;
   border-radius: 10px;
   font-size: 12px;
+  color: var(--ink);
 }
 
 .browser-bar {
