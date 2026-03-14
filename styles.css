@@ -468,12 +468,17 @@ body.theme-dark .pill {
 }
 
 .ghost {
-  border: none;
+  border: 1px solid transparent;
   background: rgba(27, 36, 48, 0.08);
   padding: 6px 10px;
   border-radius: 10px;
   font-size: 12px;
   color: var(--ink);
+}
+
+body.theme-dark .ghost {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .browser-bar {
