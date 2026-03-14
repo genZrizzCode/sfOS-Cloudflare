@@ -51,6 +51,7 @@ const convertRateLabel = document.querySelector("[data-convert-rate-label]");
 const metricDeoxy = document.querySelector("[data-metric-deoxy]");
 const metricLatency = document.querySelector("[data-metric-latency]");
 const metricUptime = document.querySelector("[data-metric-uptime]");
+const metricSession = document.querySelector("[data-metric-session]");
 
 const windows = new Map();
 document.querySelectorAll(".window").forEach((win) => {
@@ -198,6 +199,65 @@ const initNetworkStatus = () => {
   window.addEventListener("offline", updateNetworkStatus);
 };
 
+const measureLatency = async () => {
+  if (!metricLatency) return null;
+  const start = typeof performance !== "undefined" ? performance.now() : Date.now();
+  try {
+    const response = await fetch(`/ping?ts=${Date.now()}`, { cache: "no-store" });
+    const end = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (!response.ok) throw new Error("Ping failed");
+    const ms = Math.max(0, Math.round(end - start));
+    metricLatency.textContent = `${ms} ms`;
+    return ms;
+  } catch (error) {
+    metricLatency.textContent = "—";
+    return null;
+  }
+};
+
+const startLatencyMonitor = () => {
+  measureLatency();
+  window.setInterval(measureLatency, 15000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      measureLatency();
+    }
+  });
+};
+
+const updateSessionDisplay = (count) => {
+  if (!metricSession) return;
+  metricSession.textContent =
+    typeof count === "number" && Number.isFinite(count) ? `${count}` : "--";
+};
+
+const fetchSessionCount = () => {
+  if (!metricSession) return;
+  fetch("/session", { cache: "no-store" })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((data) => {
+      if (!data || typeof data.count !== "number") {
+        updateSessionDisplay(null);
+        return;
+      }
+      updateSessionDisplay(data.count);
+    })
+    .catch(() => {
+      updateSessionDisplay(null);
+    });
+};
+
+const initSessionCount = () => {
+  if (!metricSession) return;
+  fetchSessionCount();
+  window.setInterval(fetchSessionCount, 30000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      fetchSessionCount();
+    }
+  });
+};
+
 const log = (message) => {
   const stamp = new Date().toLocaleTimeString([], {
     hour: "2-digit",
@@ -341,6 +401,12 @@ const tokenizeExpression = (expression) => {
       } else {
         return { error: `Unknown token "${value}"` };
       }
+      continue;
+    }
+
+    if (char === "√") {
+      tokens.push({ type: "func", value: "sqrt" });
+      index += 1;
       continue;
     }
 
@@ -956,14 +1022,14 @@ const hideWindow = (appId) => {
   const win = windows.get(appId);
   if (!win) return;
   win.classList.add("is-hidden");
-  win.classList.remove("is-maximized");
+  win.classList.remove("is-maximized", "is-fullscreen");
 };
 
 const restoreWindow = (appId) => {
   const win = windows.get(appId);
   if (!win) return;
   const { initialWidth, initialHeight, initialLeft, initialTop } = win.dataset;
-  win.classList.remove("is-hidden", "is-maximized");
+  win.classList.remove("is-hidden", "is-maximized", "is-fullscreen");
   if (initialWidth) win.style.width = `${initialWidth}px`;
   if (initialHeight) win.style.height = `${initialHeight}px`;
   if (initialLeft) win.style.left = `${initialLeft}px`;
@@ -975,15 +1041,13 @@ const simulateRequest = (label) => {
   const hop = state.deoxyEnabled
     ? `via ${state.deoxyEndpoint} (${state.deoxyMode})`
     : "direct connection";
-  const latency = state.deoxyEnabled ? 420 : 260;
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({ hop, latency: latency + Math.round(Math.random() * 80) });
-    }, latency);
-  }).then((result) => {
-    metricLatency.textContent = `${result.latency} ms`;
-    log(`${label} completed ${result.hop}.`);
-    return result;
+  return measureLatency().then((latency) => {
+    if (typeof latency === "number") {
+      log(`${label} completed ${hop} (${latency} ms).`);
+    } else {
+      log(`${label} completed ${hop}.`);
+    }
+    return { hop, latency };
   });
 };
 
@@ -1001,7 +1065,7 @@ document.querySelectorAll("[data-minimize]").forEach((button) => {
     const win = windows.get(appId);
     if (!win) return;
 
-    if (win.classList.contains("is-maximized")) {
+    if (win.classList.contains("is-maximized") || win.classList.contains("is-fullscreen")) {
       restoreWindow(appId);
     } else {
       hideWindow(appId);
@@ -1015,8 +1079,9 @@ document.querySelectorAll("[data-maximize]").forEach((button) => {
   if (!win) return;
 
   button.addEventListener("click", () => {
-    const isMax = win.classList.contains("is-maximized");
-    win.classList.toggle("is-maximized", !isMax);
+    const isFull = win.classList.contains("is-fullscreen");
+    win.classList.toggle("is-fullscreen", !isFull);
+    win.classList.remove("is-maximized");
     focusWindow(win);
   });
 });
@@ -1036,6 +1101,7 @@ document.querySelectorAll(".window").forEach((win) => {
 
   handle.addEventListener("pointerdown", (event) => {
     if (window.matchMedia("(max-width: 960px)").matches) return;
+    if (win.classList.contains("is-fullscreen")) return;
     event.stopPropagation();
     const current = win.getBoundingClientRect();
     resizeState = {
@@ -1047,7 +1113,7 @@ document.querySelectorAll(".window").forEach((win) => {
       startHeight: current.height,
     };
     handle.setPointerCapture(event.pointerId);
-    win.classList.remove("is-maximized");
+    win.classList.remove("is-maximized", "is-fullscreen");
   });
 
   handle.addEventListener("pointermove", (event) => {
@@ -1071,6 +1137,7 @@ document.querySelectorAll(".window__titlebar").forEach((bar) => {
     if (window.matchMedia("(max-width: 960px)").matches) return;
     const win = bar.closest(".window");
     if (!win) return;
+    if (win.classList.contains("is-fullscreen")) return;
     dragState = {
       win,
       pointerId: event.pointerId,
@@ -1189,6 +1256,8 @@ initCalculator();
 initBattery();
 initNetworkClock();
 initNetworkStatus();
+initSessionCount();
+startLatencyMonitor();
 
 setDeoxyEnabled(state.deoxyEnabled);
 setDeoxyMode(state.deoxyMode);

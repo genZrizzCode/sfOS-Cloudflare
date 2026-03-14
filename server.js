@@ -27,6 +27,7 @@ const STRIP_RESPONSE_HEADERS = new Set([
 ]);
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+let localSessionCount = 0;
 
 function rewriteUrl(value, baseUrl) {
   if (!value) return value;
@@ -566,6 +567,9 @@ function handleDeoxy(req, res) {
   }
 
   console.log("[deoxy] request", targetUrl.toString());
+  if (isNavigationRequest(req)) {
+    localSessionCount += 1;
+  }
 
   const client = targetUrl.protocol === "https:" ? https : http;
 
@@ -656,7 +660,16 @@ const server = http.createServer((req, res) => {
   const parsed = url.parse(req.url);
   const pathname = parsed.pathname || "/";
 
-  if (pathname === "/deoxy") {
+  if (pathname === "/ping") {
+    res.writeHead(204, { "Cache-Control": "no-store" });
+    res.end();
+  } else if (pathname === "/session") {
+    res.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+    });
+    res.end(JSON.stringify({ count: localSessionCount, source: "local" }));
+  } else if (pathname === "/deoxy") {
     handleDeoxy(req, res);
   } else if (maybeRedirectDeoxy(req, res)) {
     return;

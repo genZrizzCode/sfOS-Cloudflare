@@ -18,6 +18,7 @@ sfOS can run on Cloudflare Pages so visitors don’t need to run any console com
 
 - Static files: `index.html`, `styles.css`, `app.js`, etc.
 - Deoxy function: `functions/deoxy.js` (Cloudflare Pages Function).
+- Session counter: `functions/session.js` (Cloudflare Pages Function, uses D1).
 
 The Nebula Tunnel window uses a relative endpoint: `/deoxy?target=...`, which will be handled by `functions/deoxy.js`.
 
@@ -45,3 +46,8 @@ Once deployed:
 - Menu bar battery uses the browser Battery API when available.
 - Menu bar network shows Online/Offline based on browser connection events.
 - Window content scrolls automatically when the window height is too small to fit the sub-app content.
+- Session number uses Cloudflare D1 in production. Create a D1 database and bind it as `DB`, then run:
+```sql
+CREATE TABLE IF NOT EXISTS deoxy_sessions (id INTEGER PRIMARY KEY CHECK (id = 1), count INTEGER NOT NULL);
+INSERT OR IGNORE INTO deoxy_sessions (id, count) VALUES (1, 0);
+```

@@ -6,6 +6,37 @@ const STRIP_RESPONSE_HEADERS = new Set([
 ]);
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+let sessionTableReady = false;
+
+function isNavigationRequest(request) {
+  const accept = request.headers.get("accept") || "";
+  const dest = (request.headers.get("sec-fetch-dest") || "").toLowerCase();
+  const mode = (request.headers.get("sec-fetch-mode") || "").toLowerCase();
+  return accept.includes("text/html") || dest === "document" || mode === "navigate";
+}
+
+async function ensureSessionTable(env) {
+  if (!env || !env.DB || sessionTableReady) return;
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS deoxy_sessions (id INTEGER PRIMARY KEY CHECK (id = 1), count INTEGER NOT NULL)",
+  ).run();
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO deoxy_sessions (id, count) VALUES (1, 0)",
+  ).run();
+  sessionTableReady = true;
+}
+
+async function incrementSessionCount(env) {
+  if (!env || !env.DB) return null;
+  await ensureSessionTable(env);
+  await env.DB.prepare(
+    "UPDATE deoxy_sessions SET count = count + 1 WHERE id = 1",
+  ).run();
+  const row = await env.DB.prepare(
+    "SELECT count FROM deoxy_sessions WHERE id = 1",
+  ).first();
+  return row && typeof row.count === "number" ? row.count : null;
+}
 
 function rewriteUrl(value, baseUrl) {
   if (!value) return value;
@@ -427,7 +458,7 @@ function stripHeaders(headers) {
   STRIP_RESPONSE_HEADERS.forEach((name) => headers.delete(name));
 }
 
-export async function onRequest({ request }) {
+export async function onRequest({ request, env }) {
   const url = new URL(request.url);
   const target = url.searchParams.get("target");
 
@@ -447,6 +478,14 @@ export async function onRequest({ request }) {
   }
 
   console.log("[deoxy] request", targetUrl.toString());
+  let sessionCount = null;
+  if (isNavigationRequest(request)) {
+    try {
+      sessionCount = await incrementSessionCount(env);
+    } catch (error) {
+      console.log("[deoxy] session increment failed", error.message);
+    }
+  }
 
   const requestHeaders = new Headers(request.headers);
   // Remove hop-by-hop and Cloudflare-specific headers that should not be forwarded.
@@ -506,6 +545,9 @@ export async function onRequest({ request }) {
     const html = await upstreamResponse.text();
     const rewritten = rewriteHtml(html, targetUrl);
     responseHeaders.set("content-length", String(new TextEncoder().encode(rewritten).length));
+    if (typeof sessionCount === "number") {
+      responseHeaders.set("x-sfos-session", String(sessionCount));
+    }
     return new Response(rewritten, {
       status: upstreamResponse.status,
       statusText: upstreamResponse.statusText,
@@ -519,6 +561,9 @@ export async function onRequest({ request }) {
       "content-length",
       String(new TextEncoder().encode(rewritten).length),
     );
+    if (typeof sessionCount === "number") {
+      responseHeaders.set("x-sfos-session", String(sessionCount));
+    }
     return new Response(rewritten, {
       status: upstreamResponse.status,
       statusText: upstreamResponse.statusText,
@@ -526,6 +571,9 @@ export async function onRequest({ request }) {
     });
   }
 
+  if (typeof sessionCount === "number") {
+    responseHeaders.set("x-sfos-session", String(sessionCount));
+  }
   return new Response(upstreamResponse.body, {
     status: upstreamResponse.status,
     statusText: upstreamResponse.statusText,

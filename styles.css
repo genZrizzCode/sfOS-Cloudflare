@@ -333,6 +333,23 @@ body.theme-dark .window__resize {
   overflow: auto;
 }
 
+.window.is-fullscreen {
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+}
+
+.window.is-fullscreen .window__content {
+  max-height: calc(100% - 52px);
+  overflow: auto;
+}
+
+.window.is-fullscreen .window__resize {
+  display: none;
+}
+
 .window.is-hidden {
   display: none;
 }
