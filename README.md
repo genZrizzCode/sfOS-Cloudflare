@@ -1,16 +1,16 @@
 # <span style="font-family: 'SF Pro', sans-serif;">sfOS</span>
 
-This project is a macOS-inspired web OS concept with a built-in deoxy layer. The UI includes a dock, menu bar, draggable windows, and a Deoxy Center that simulates system-wide routing.
+This project is a macOS-inspired web OS concept with a built-in proxy layer. The UI includes a dock, menu bar, draggable windows, and a Deoxy Center that simulates system-wide routing.
 
 ## Open locally (static demo)
 
-Open `index.html` directly in a browser for the UI demo only (deoxy tunneling requires a server), or run a local server:
+Open `index.html` directly in a browser for the UI demo only (proxy tunneling requires a server), or run a local server:
 
 `python3 -m http.server 5173`
 
 Then visit `http://localhost:5173`.
 
-## Deploy to Cloudflare Pages (with deoxy)
+## Deploy to Cloudflare Pages (with proxy)
 
 sfOS can run on Cloudflare Pages so visitors don’t need to run any console commands.
 
