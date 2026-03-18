@@ -107,6 +107,16 @@ function rewriteHtml(html, baseUrl) {
       ` style=${quote}${rewriteCss(value, baseUrl)}${quote}`,
   );
   next = next.replace(
+    /(<meta[^>]+http-equiv=["']?refresh["']?[^>]*content=["'])([^"']*)(["'][^>]*>)/gi,
+    (match, start, content, end) => {
+      const updated = content.replace(/url\s*=\s*([^;]+)/i, (m, urlValue) => {
+        const rewritten = rewriteUrl(urlValue.trim(), baseUrl);
+        return `url=${rewritten}`;
+      });
+      return `${start}${updated}${end}`;
+    },
+  );
+  next = next.replace(
     /<style([^>]*)>([\s\S]*?)<\/style>/gi,
     (match, attrs, value) =>
       `<style${attrs}>${rewriteCss(value, baseUrl)}</style>`,
@@ -242,11 +252,22 @@ function injectDeoxyScript(html, baseUrl) {
           if (el.hasAttribute("href")) rewriteAttribute(el, "href");
           if (el.hasAttribute("src")) rewriteAttribute(el, "src");
           if (el.hasAttribute("action")) rewriteAttribute(el, "action");
+          if (el.hasAttribute("data-src")) rewriteAttribute(el, "data-src");
+          if (el.hasAttribute("data-lazy-src")) rewriteAttribute(el, "data-lazy-src");
+          if (el.hasAttribute("data-original")) rewriteAttribute(el, "data-original");
+          if (el.hasAttribute("poster")) rewriteAttribute(el, "poster");
           if (el.hasAttribute("srcset")) {
             const value = el.getAttribute("srcset");
             const next = rewriteSrcsetValue(value);
             if (next && next !== value) {
               el.setAttribute("srcset", next);
+            }
+          }
+          if (el.hasAttribute("data-srcset")) {
+            const value = el.getAttribute("data-srcset");
+            const next = rewriteSrcsetValue(value);
+            if (next && next !== value) {
+              el.setAttribute("data-srcset", next);
             }
           }
         };
@@ -264,7 +285,7 @@ function injectDeoxyScript(html, baseUrl) {
           if (!root.querySelectorAll) return;
           root
             .querySelectorAll(
-              "a[href], form[action], link[href], script[src], img[src], iframe[src], source[src], video[src], audio[src]",
+              "a[href], form[action], link[href], script[src], img[src], iframe[src], source[src], video[src], audio[src], img[data-src], source[data-src], video[poster]",
             )
             .forEach((el) => rewriteElement(el));
         };
@@ -330,6 +351,14 @@ function injectDeoxyScript(html, baseUrl) {
                 ? rewriteIfNeeded(urlString, "location.replace")
                 : null;
               return originalReplace(next || urlString || url);
+            };
+          }
+          if (window.open) {
+            const originalOpen = window.open.bind(window);
+            window.open = function(url, name, features) {
+              const urlString = normalizeUrlInput(url);
+              const next = urlString ? rewriteIfNeeded(urlString, "window.open") : null;
+              return originalOpen(next || urlString || url, name, features);
             };
           }
           const locProto = Object.getPrototypeOf(window.location);
@@ -427,7 +456,17 @@ function injectDeoxyScript(html, baseUrl) {
             subtree: true,
             childList: true,
             attributes: true,
-            attributeFilter: ["href", "src", "action", "srcset"],
+            attributeFilter: [
+              "href",
+              "src",
+              "action",
+              "srcset",
+              "data-src",
+              "data-srcset",
+              "data-lazy-src",
+              "data-original",
+              "poster",
+            ],
           });
         } catch (error) {
           log("mutation observer failed", error.message);

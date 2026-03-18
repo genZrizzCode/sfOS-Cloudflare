@@ -157,6 +157,27 @@
           </div>
         </div>
 
+        <div class="window" data-app="duckduckgo" style="--x: 22%; --y: 30%;">
+          <div class="window__titlebar">
+            <div class="window__traffic">
+              <button class="traffic red" data-close="duckduckgo" aria-label="Close"></button>
+              <button class="traffic yellow" data-minimize="duckduckgo" aria-label="Minimize"></button>
+              <button class="traffic green" data-maximize="duckduckgo" aria-label="Zoom"></button>
+            </div>
+            <div class="window__title">DuckDuckGo</div>
+          </div>
+          <div class="window__content">
+            <div class="browser-frame">
+              <iframe
+                class="duckduckgo-frame"
+                title="DuckDuckGo"
+                src="/deoxy?target=https%3A%2F%2Fduckduckgo.com%2F"
+                loading="lazy"
+              ></iframe>
+            </div>
+          </div>
+        </div>
+
         <div class="window" data-app="monitor" style="--x: 18%; --y: 58%;">
           <div class="window__titlebar">
             <div class="window__traffic">
@@ -229,7 +250,7 @@
               <div class="experience-card">
                 <a
                   class="experience-logo"
-                  href="https://sfos26.pages.dev/deoxy?target=https%3A%2F%2Fboredom.global.ssl.fastly.net%2F"
+                  href="https://sfos26.pages.dev/deoxy?target=https%3A%2F%2Fboredom.global.ssl.fastly.net%2Fgames%2F"
                   target="_blank"
                   rel="noopener"
                 >
@@ -240,7 +261,7 @@
                 </a>
                 <a
                   class="experience-subtitle"
-                  href="https://sfos26.pages.dev/deoxy?target=https%3A%2F%2Fboredom.global.ssl.fastly.net%2F"
+                  href="https://sfos26.pages.dev/deoxy?target=https%3A%2F%2Fboredom.global.ssl.fastly.net%2Fgames%2F"
                   target="_blank"
                   rel="noopener"
                 >
@@ -474,6 +495,10 @@ Design cues:
         <button class="dock__button" data-open="tunnel">
           <span class="dock__icon">T</span>
           <span class="dock__label">Tunnel</span>
+        </button>
+        <button class="dock__button" data-open="duckduckgo">
+          <span class="dock__icon">D</span>
+          <span class="dock__label">DuckDuckGo</span>
         </button>
         <button class="dock__button" data-open="studio">
           <span class="dock__icon">S</span>

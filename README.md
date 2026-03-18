@@ -1,4 +1,4 @@
-# <span style="font-family: 'SF Pro', sans-serif;">sfOS</span>
+# sfOS
 
 This project is a macOS-inspired web OS concept with a built-in proxy layer. The UI includes a dock, menu bar, draggable windows, and a Deoxy Center that simulates system-wide routing.
 
@@ -12,7 +12,7 @@ Then visit `http://localhost:5173`.
 
 ## Deploy to Cloudflare Pages (with proxy)
 
-sfOS can run on Cloudflare Pages so visitors don’t need to run any console commands.
+sfOS can run on Cloudflare Pages, so visitors don’t need to run any console commands.
 
 ### Structure
 
@@ -27,9 +27,9 @@ The Nebula Tunnel window uses a relative endpoint: `/deoxy?target=...`, which wi
 1. Push this project to a Git repository (GitHub, GitLab, etc.).
 2. In Cloudflare Pages, create a new project from that repo.
 3. Build settings:
-   - **Framework preset**: None
-   - **Build command**: leave empty (or `npm run build` if you add one later)
-   - **Build output directory**: the folder containing `index.html` (for this prototype, the repo root that has `index.html` and the `functions/` directory).
+  - **Framework preset**: None
+  - **Build command**: leave empty (or `npm run build` if you add one later)
+  - **Build output directory**: the folder containing `index.html` (for this prototype, the repo root that has `index.html` and the `functions/` directory).
 4. Deploy.
 
 Once deployed:
@@ -47,7 +47,9 @@ Once deployed:
 - Menu bar network shows Online/Offline based on browser connection events.
 - Window content scrolls automatically when the window height is too small to fit the sub-app content.
 - Session number uses Cloudflare D1 in production. Create a D1 database and bind it as `DB`, then run:
+
 ```sql
 CREATE TABLE IF NOT EXISTS deoxy_sessions (id INTEGER PRIMARY KEY CHECK (id = 1), count INTEGER NOT NULL);
 INSERT OR IGNORE INTO deoxy_sessions (id, count) VALUES (1, 0);
 ```
+
