@@ -1581,19 +1581,46 @@ var EpoxyTransport = class {
         headers: headersObj,
         redirect: "manual"
       });
-      let headersEntries = [];
-      for (let [key, value] of Object.entries(res.rawHeaders)) {
-        if (Array.isArray(value)) {
-          for (let v of value) {
-            headersEntries.push([key, v]);
+      const normalizeHeaders = (source) => {
+        const normalized = {};
+        const addHeader = (key, value) => {
+          if (key == null) return;
+          const name = String(key).toLowerCase();
+          if (Array.isArray(value)) {
+            value.forEach((item) => addHeader(name, item));
+            return;
           }
-        } else {
-          headersEntries.push([key, value]);
+          const next = value == null ? "" : String(value);
+          if (normalized[name] === undefined) {
+            normalized[name] = next;
+          } else if (Array.isArray(normalized[name])) {
+            normalized[name].push(next);
+          } else {
+            normalized[name] = [normalized[name], next];
+          }
+        };
+        if (source instanceof Headers) {
+          source.forEach((value, key) => addHeader(key, value));
+        } else if (Array.isArray(source)) {
+          for (let entry of source) {
+            if (Array.isArray(entry) && entry.length >= 2) {
+              addHeader(entry[0], entry[1]);
+            }
+          }
+        } else if (source && typeof source === "object") {
+          for (let [key, value] of Object.entries(source)) {
+            addHeader(key, value);
+          }
         }
+        return normalized;
+      };
+      let headersOut = normalizeHeaders(res.rawHeaders);
+      if (!Object.keys(headersOut).length && res.headers) {
+        headersOut = normalizeHeaders(res.headers);
       }
       return {
         body: res.body,
-        headers: headersEntries,
+        headers: headersOut,
         status: res.status,
         statusText: res.statusText
       };
