@@ -52,6 +52,15 @@ const metricDeoxy = document.querySelector("[data-metric-deoxy]");
 const metricLatency = document.querySelector("[data-metric-latency]");
 const metricUptime = document.querySelector("[data-metric-uptime]");
 const metricSession = document.querySelector("[data-metric-session]");
+const duckduckgoFrame = document.querySelector("[data-duckduckgo-frame]");
+const scramjetTargets = document.querySelectorAll("[data-scramjet-target]");
+
+const SCRAMJET_PREFIX = "/scramjet/";
+const SCRAMJET_SW = `${SCRAMJET_PREFIX}sw.js`;
+const SCRAMJET_BARE_MUX = "/bare-mux/index.mjs";
+const SCRAMJET_BARE_MUX_WORKER = "/bare-mux/worker.js";
+const SCRAMJET_TRANSPORT = "/epoxy/index.mjs";
+const SCRAMJET_WISP = "wss://wisp.mercurywork.shop/";
 
 const windows = new Map();
 document.querySelectorAll(".window").forEach((win) => {
@@ -62,6 +71,8 @@ let zIndex = 25;
 let logLines = [];
 let dragState = null;
 let resizeState = null;
+let scramjetInitPromise = null;
+let scramjetReady = false;
 
 const pad = (value) => String(value).padStart(2, "0");
 
@@ -299,6 +310,102 @@ const log = (message) => {
   logEl.textContent = logLines.join("\n");
 };
 
+const waitForServiceWorkerActivation = (registration) =>
+  new Promise((resolve, reject) => {
+    if (!registration) {
+      resolve(null);
+      return;
+    }
+    if (registration.active) {
+      resolve(registration.active);
+      return;
+    }
+    const worker = registration.installing || registration.waiting;
+    if (!worker) {
+      resolve(null);
+      return;
+    }
+    worker.addEventListener("statechange", () => {
+      if (worker.state === "activated") {
+        resolve(worker);
+      } else if (worker.state === "redundant") {
+        reject(new Error("Scramjet service worker failed to activate."));
+      }
+    });
+  });
+
+const ensureScramjet = async () => {
+  if (scramjetInitPromise) return scramjetInitPromise;
+  scramjetInitPromise = (async () => {
+    if (!("serviceWorker" in navigator)) {
+      log("Scramjet unavailable: service workers not supported.");
+      return false;
+    }
+    try {
+      const registration = await navigator.serviceWorker.register(SCRAMJET_SW);
+      await waitForServiceWorkerActivation(registration);
+      const module = await import(SCRAMJET_BARE_MUX);
+      const connection = new module.BareMuxConnection(SCRAMJET_BARE_MUX_WORKER);
+      await connection.setTransport(SCRAMJET_TRANSPORT, [{ wisp: SCRAMJET_WISP }]);
+      scramjetReady = true;
+      return true;
+    } catch (error) {
+      scramjetReady = false;
+      log(`Scramjet init failed: ${error.message}`);
+      return false;
+    }
+  })();
+  return scramjetInitPromise;
+};
+
+const getScramjetEncoder = () => {
+  const config = window.__scramjet$config;
+  if (config && typeof config.codec?.encode === "function") {
+    return { prefix: config.prefix || SCRAMJET_PREFIX, encode: config.codec.encode };
+  }
+  return { prefix: SCRAMJET_PREFIX, encode: encodeURIComponent };
+};
+
+const buildScramjetUrl = (input) => {
+  try {
+    const { prefix, encode } = getScramjetEncoder();
+    const absolute = new URL(input, window.location.origin);
+    return `${window.location.origin}${prefix}${encode(absolute.href)}`;
+  } catch {
+    return input;
+  }
+};
+
+const updateScramjetTargets = async () => {
+  if (!scramjetTargets.length) return;
+  if (!state.deoxyEnabled) {
+    scramjetTargets.forEach((link) => {
+      if (link.dataset.scramjetTarget) {
+        link.href = link.dataset.scramjetTarget;
+      }
+    });
+    return;
+  }
+  const ready = await ensureScramjet();
+  if (!ready) return;
+  scramjetTargets.forEach((link) => {
+    if (link.dataset.scramjetTarget) {
+      link.href = buildScramjetUrl(link.dataset.scramjetTarget);
+    }
+  });
+};
+
+const updateDuckDuckGoFrame = async () => {
+  if (!duckduckgoFrame) return;
+  if (!state.deoxyEnabled) {
+    duckduckgoFrame.src = "https://duckduckgo.com/";
+    return;
+  }
+  const ready = await ensureScramjet();
+  if (!ready) return;
+  duckduckgoFrame.src = buildScramjetUrl("https://duckduckgo.com/");
+};
+
 const setDeoxyEnabled = (enabled) => {
   state.deoxyEnabled = enabled;
   deoxyToggles.forEach((toggle) => {
@@ -309,6 +416,8 @@ const setDeoxyEnabled = (enabled) => {
   deoxySub.textContent = enabled ? "Smart routing enabled" : "Deoxy paused";
   metricDeoxy.textContent = enabled ? "Enabled" : "Paused";
   log(enabled ? "Deoxy shield enabled." : "Deoxy shield paused.");
+  updateScramjetTargets();
+  updateDuckDuckGoFrame();
 };
 
 const setDeoxyMode = (mode) => {
@@ -1232,7 +1341,7 @@ if (tunnelForm) {
     tunnelStatus.textContent = "Building tunnel...";
     tunnelOutput.textContent = `Establishing deoxy chain for ${url}...`;
 
-    simulateRequest("Tunnel negotiation").then((firstHop) => {
+    simulateRequest("Tunnel negotiation").then(async (firstHop) => {
       const chain = state.deoxyEnabled
         ? `Ingress → ${state.deoxyEndpoint} → Exit region`
         : "Direct exit (no deoxy chain)";
@@ -1246,8 +1355,14 @@ if (tunnelForm) {
         `A real view of this page has been opened via the sfOS deoxy in a new tab.`,
       ].join("\n");
 
-      const deoxyUrl = `/deoxy?target=${encodeURIComponent(url)}`;
-      window.open(deoxyUrl, "_blank", "noopener");
+      let nextUrl = url;
+      if (state.deoxyEnabled) {
+        const ready = await ensureScramjet();
+        if (ready) {
+          nextUrl = buildScramjetUrl(url);
+        }
+      }
+      window.open(nextUrl, "_blank", "noopener");
     });
   });
 }

@@ -10,6 +10,7 @@ const PORT = process.env.PORT || 8443;
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".png": "image/png",
@@ -515,6 +516,15 @@ function isNavigationRequest(req) {
 function maybeRedirectDeoxy(req, res) {
   if (req.method !== "GET") return false;
   if (!isNavigationRequest(req)) return false;
+  const requestUrl = new URL(req.url, `http://${req.headers.host}`);
+  if (
+    requestUrl.pathname === "/scramjet" ||
+    requestUrl.pathname.startsWith("/scramjet/") ||
+    requestUrl.pathname.startsWith("/bare-mux/") ||
+    requestUrl.pathname.startsWith("/epoxy/")
+  ) {
+    return false;
+  }
   const referer = req.headers.referer || req.headers.referrer;
   if (!referer) return false;
   try {
@@ -522,7 +532,6 @@ function maybeRedirectDeoxy(req, res) {
     const target = refUrl.searchParams.get("target");
     if (!target) return false;
     const targetUrl = new URL(target);
-    const requestUrl = new URL(req.url, `http://${req.headers.host}`);
     const nextTarget = new URL(
       `${requestUrl.pathname}${requestUrl.search}`,
       targetUrl,
@@ -542,7 +551,16 @@ function maybeRedirectDeoxyFromCookie(req, res) {
   if (req.method !== "GET") return false;
   if (!isNavigationRequest(req)) return false;
   const parsed = url.parse(req.url);
-  if ((parsed.pathname || "").includes(".")) return false;
+  const pathname = parsed.pathname || "";
+  if (
+    pathname === "/scramjet" ||
+    pathname.startsWith("/scramjet/") ||
+    pathname.startsWith("/bare-mux/") ||
+    pathname.startsWith("/epoxy/")
+  ) {
+    return false;
+  }
+  if (pathname.includes(".")) return false;
   const cookies = parseCookies(req.headers.cookie || "");
   if (!cookies.sfos_deoxy_base) return false;
   try {

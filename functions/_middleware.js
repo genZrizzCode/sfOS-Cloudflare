@@ -5,6 +5,14 @@ export async function onRequest(context) {
   if (url.pathname === "/deoxy") {
     return next();
   }
+  if (
+    url.pathname === "/scramjet" ||
+    url.pathname.startsWith("/scramjet/") ||
+    url.pathname.startsWith("/bare-mux/") ||
+    url.pathname.startsWith("/epoxy/")
+  ) {
+    return next();
+  }
 
   if (request.method !== "GET") {
     return next();
