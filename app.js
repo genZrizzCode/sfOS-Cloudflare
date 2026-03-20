@@ -61,6 +61,11 @@ const SCRAMJET_BARE_MUX = "/bare-mux/index.mjs";
 const SCRAMJET_BARE_MUX_WORKER = "/bare-mux/worker.js";
 const SCRAMJET_TRANSPORT = "/epoxy/index.mjs";
 const SCRAMJET_WISP = "wss://wisp.mercurywork.shop/";
+const SCRAMJET_FILES = {
+  wasm: `${SCRAMJET_PREFIX}scramjet.wasm.wasm`,
+  all: `${SCRAMJET_PREFIX}scramjet.all.js`,
+  sync: `${SCRAMJET_PREFIX}scramjet.sync.js`,
+};
 
 const windows = new Map();
 document.querySelectorAll(".window").forEach((win) => {
@@ -73,6 +78,8 @@ let dragState = null;
 let resizeState = null;
 let scramjetInitPromise = null;
 let scramjetReady = false;
+let scramjetController = null;
+let duckduckgoScramjetFrame = null;
 
 const pad = (value) => String(value).padStart(2, "0");
 
@@ -334,11 +341,28 @@ const waitForServiceWorkerActivation = (registration) =>
     });
   });
 
+const getScramjetController = () => {
+  if (scramjetController) return scramjetController;
+  if (typeof window.$scramjetLoadController !== "function") {
+    return null;
+  }
+  const { ScramjetController } = window.$scramjetLoadController();
+  scramjetController = new ScramjetController({
+    prefix: SCRAMJET_PREFIX,
+    files: SCRAMJET_FILES,
+  });
+  return scramjetController;
+};
+
 const ensureScramjet = async () => {
   if (scramjetInitPromise) return scramjetInitPromise;
   scramjetInitPromise = (async () => {
     if (!("serviceWorker" in navigator)) {
       log("Scramjet unavailable: service workers not supported.");
+      return false;
+    }
+    if (typeof window.$scramjetLoadController !== "function") {
+      log("Scramjet unavailable: core bundle not loaded.");
       return false;
     }
     try {
@@ -347,6 +371,15 @@ const ensureScramjet = async () => {
       const module = await import(SCRAMJET_BARE_MUX);
       const connection = new module.BareMuxConnection(SCRAMJET_BARE_MUX_WORKER);
       await connection.setTransport(SCRAMJET_TRANSPORT, [{ wisp: SCRAMJET_WISP }]);
+      const controller = getScramjetController();
+      if (!controller) {
+        log("Scramjet init failed: controller unavailable.");
+        return false;
+      }
+      await controller.init();
+      if (duckduckgoFrame && !duckduckgoScramjetFrame) {
+        duckduckgoScramjetFrame = controller.createFrame(duckduckgoFrame);
+      }
       scramjetReady = true;
       return true;
     } catch (error) {
@@ -358,19 +391,16 @@ const ensureScramjet = async () => {
   return scramjetInitPromise;
 };
 
-const getScramjetEncoder = () => {
-  const config = window.__scramjet$config;
-  if (config && typeof config.codec?.encode === "function") {
-    return { prefix: config.prefix || SCRAMJET_PREFIX, encode: config.codec.encode };
-  }
-  return { prefix: SCRAMJET_PREFIX, encode: encodeURIComponent };
-};
-
 const buildScramjetUrl = (input) => {
   try {
-    const { prefix, encode } = getScramjetEncoder();
+    const controller = scramjetController || getScramjetController();
+    if (!controller) return input;
     const absolute = new URL(input, window.location.origin);
-    return `${window.location.origin}${prefix}${encode(absolute.href)}`;
+    const encoded = controller.encodeUrl(absolute.href);
+    if (encoded.startsWith("http://") || encoded.startsWith("https://")) {
+      return encoded;
+    }
+    return encoded.startsWith("/") ? encoded : `${SCRAMJET_PREFIX}${encoded}`;
   } catch {
     return input;
   }
@@ -403,6 +433,10 @@ const updateDuckDuckGoFrame = async () => {
   }
   const ready = await ensureScramjet();
   if (!ready) return;
+  if (duckduckgoScramjetFrame) {
+    duckduckgoScramjetFrame.go("https://duckduckgo.com/");
+    return;
+  }
   duckduckgoFrame.src = buildScramjetUrl("https://duckduckgo.com/");
 };
 
