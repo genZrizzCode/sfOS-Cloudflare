@@ -1558,7 +1558,16 @@ var EpoxyTransport = class {
     if (body instanceof Blob) body = await body.arrayBuffer();
     try {
       let headersObj = {};
-      for (let [key, value] of headers) {
+      const headerEntries = (() => {
+        if (!headers) return [];
+        if (headers instanceof Headers) return Array.from(headers.entries());
+        if (typeof headers[Symbol.iterator] === "function") {
+          return Array.from(headers);
+        }
+        if (typeof headers === "object") return Object.entries(headers);
+        return [];
+      })();
+      for (let [key, value] of headerEntries) {
         if (headersObj[key]) {
           console.warn(
             `Duplicate header key "${key}" detected. Overwriting previous value.`
