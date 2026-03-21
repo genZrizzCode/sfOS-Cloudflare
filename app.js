@@ -393,9 +393,12 @@ const ensureScramjet = async () => {
 
 const buildScramjetUrl = (input) => {
   try {
-    const controller = scramjetController || getScramjetController();
-    if (!controller) return input;
     const absolute = new URL(input, window.location.origin);
+    const fallback = `${window.location.origin}${SCRAMJET_PREFIX}${encodeURIComponent(
+      absolute.href,
+    )}`;
+    const controller = scramjetController || getScramjetController();
+    if (!controller) return fallback;
     const encoded = controller.encodeUrl(absolute.href);
     if (encoded.startsWith("http://") || encoded.startsWith("https://")) {
       return encoded;
@@ -417,7 +420,6 @@ const updateScramjetTargets = async () => {
     return;
   }
   const ready = await ensureScramjet();
-  if (!ready) return;
   scramjetTargets.forEach((link) => {
     if (link.dataset.scramjetTarget) {
       link.href = buildScramjetUrl(link.dataset.scramjetTarget);
@@ -432,12 +434,11 @@ const updateDuckDuckGoFrame = async () => {
     return;
   }
   const ready = await ensureScramjet();
-  if (!ready) return;
-  if (duckduckgoScramjetFrame) {
+  if (ready && duckduckgoScramjetFrame) {
     duckduckgoScramjetFrame.go("https://duckduckgo.com/");
-    return;
+  } else {
+    duckduckgoFrame.src = buildScramjetUrl("https://duckduckgo.com/");
   }
-  duckduckgoFrame.src = buildScramjetUrl("https://duckduckgo.com/");
 };
 
 const setDeoxyEnabled = (enabled) => {

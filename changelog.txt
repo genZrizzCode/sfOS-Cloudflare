@@ -1,0 +1,8 @@
+sfOS changelog
+
+Beta Versions (all compressed into one entry because I'm lazy):
+- Added Scramjet bootstrap fallback for /scramjet/* navigations so Chromebooks can self-register the service worker.
+- Adjusted Scramjet resource routing to avoid proxying its own runtime files.
+- Normalized Epoxy transport headers handling for compatibility with Bare-Mux.
+- DuckDuckGo iframe auto-fills its window content.
+- Experiences links now default to Scramjet URLs when deoxy is on.
