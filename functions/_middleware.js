@@ -6,6 +6,7 @@ export async function onRequest(context) {
   const mode = (request.headers.get("sec-fetch-mode") || "").toLowerCase();
   const isNavigation = accept.includes("text/html") || dest === "document" || mode === "navigate";
   const isScramjetPath = url.pathname === "/scramjet" || url.pathname.startsWith("/scramjet/");
+  const isUvPath = url.pathname === "/uv" || url.pathname.startsWith("/uv/");
   const scramjetAssets = new Set([
     "/scramjet/sw.js",
     "/scramjet/scramjet.all.js",
@@ -73,6 +74,10 @@ export async function onRequest(context) {
     return new Response(bootstrapHtml, {
       headers: { "content-type": "text/html; charset=utf-8" },
     });
+  }
+
+  if (isUvPath) {
+    return next();
   }
 
   if (url.pathname === "/deoxy") {

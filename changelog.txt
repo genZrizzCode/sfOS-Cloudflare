@@ -6,3 +6,4 @@ Beta Versions (all compressed into one entry because I'm lazy):
 - Normalized Epoxy transport headers handling for compatibility with Bare-Mux.
 - DuckDuckGo iframe auto-fills its window content.
 - Experiences links now default to Scramjet URLs when deoxy is on.
+- Added a UV fallback when Scramjet is unavailable (managed devices / policy blocks).
