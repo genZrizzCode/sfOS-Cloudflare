@@ -3,6 +3,7 @@ export async function onRequest() {
     status: 204,
     headers: {
       "cache-control": "no-store",
+      "x-sfos-deoxy": "ping",
     },
   });
 }

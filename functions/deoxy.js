@@ -1,3 +1,9 @@
+import {
+  recoverTargetFromCookie,
+  remapProxyTargetToUpstream,
+  rewriteUrl,
+} from "./deoxy-shared.js";
+
 const STRIP_RESPONSE_HEADERS = new Set([
   "content-security-policy",
   "content-security-policy-report-only",
@@ -38,56 +44,29 @@ async function incrementSessionCount(env) {
   return row && typeof row.count === "number" ? row.count : null;
 }
 
-function rewriteUrl(value, baseUrl) {
-  if (!value) return value;
-  const trimmed = value.trim();
-  if (
-    trimmed.startsWith("/deoxy?target=") ||
-    trimmed.startsWith("about:") ||
-    trimmed.startsWith("blob:") ||
-    trimmed.startsWith("data:") ||
-    trimmed.startsWith("javascript:") ||
-    trimmed.startsWith("mailto:") ||
-    trimmed.startsWith("moz-extension:") ||
-    trimmed.startsWith("safari-extension:") ||
-    trimmed.startsWith("tel:") ||
-    trimmed.startsWith("chrome-extension:") ||
-    trimmed.startsWith("edge:") ||
-    trimmed.startsWith("#")
-  ) {
-    return trimmed;
-  }
-  try {
-    const absolute = new URL(trimmed, baseUrl);
-    return `/deoxy?target=${encodeURIComponent(absolute.toString())}`;
-  } catch {
-    return value;
-  }
-}
-
-function rewriteSrcset(value, baseUrl) {
+function rewriteSrcset(value, baseUrl, proxyOrigin) {
   if (!value) return value;
   return value
     .split(",")
     .map((entry) => {
       const parts = entry.trim().split(/\s+/);
       if (!parts.length) return entry;
-      const rewritten = rewriteUrl(parts[0], baseUrl);
+      const rewritten = rewriteUrl(parts[0], baseUrl, proxyOrigin);
       return [rewritten, ...parts.slice(1)].join(" ");
     })
     .join(", ");
 }
 
-function rewriteCss(css, baseUrl) {
+function rewriteCss(css, baseUrl, proxyOrigin) {
   if (!css) return css;
   let next = css.replace(
     /@import\s+(?:url\()?\s*['"]?([^'")\s]+)['"]?\s*\)?/gi,
-    (match, value) => match.replace(value, rewriteUrl(value, baseUrl)),
+    (match, value) => match.replace(value, rewriteUrl(value, baseUrl, proxyOrigin)),
   );
   next = next.replace(
     /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi,
     (match, quote, value) => {
-      const rewritten = rewriteUrl(value, baseUrl);
+      const rewritten = rewriteUrl(value, baseUrl, proxyOrigin);
       if (!rewritten || rewritten === value) return match;
       const q = quote || "";
       return `url(${q}${rewritten}${q})`;
@@ -96,7 +75,7 @@ function rewriteCss(css, baseUrl) {
   return next;
 }
 
-function rewriteHtml(html, baseUrl) {
+function rewriteHtml(html, baseUrl, proxyOrigin) {
   let next = html;
   next = next.replace(
     /<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi,
@@ -104,22 +83,22 @@ function rewriteHtml(html, baseUrl) {
   );
   next = next.replace(
     /\s(href|src|action)=["']([^"']+)["']/gi,
-    (match, attr, value) => ` ${attr}="${rewriteUrl(value, baseUrl)}"`,
+    (match, attr, value) => ` ${attr}="${rewriteUrl(value, baseUrl, proxyOrigin)}"`,
   );
   next = next.replace(
     /\ssrcset=["']([^"']+)["']/gi,
-    (match, value) => ` srcset="${rewriteSrcset(value, baseUrl)}"`,
+    (match, value) => ` srcset="${rewriteSrcset(value, baseUrl, proxyOrigin)}"`,
   );
   next = next.replace(
     /\sstyle=(["'])([^"']*)\1/gi,
     (match, quote, value) =>
-      ` style=${quote}${rewriteCss(value, baseUrl)}${quote}`,
+      ` style=${quote}${rewriteCss(value, baseUrl, proxyOrigin)}${quote}`,
   );
   next = next.replace(
     /(<meta[^>]+http-equiv=["']?refresh["']?[^>]*content=["'])([^"']*)(["'][^>]*>)/gi,
     (match, start, content, end) => {
       const updated = content.replace(/url\s*=\s*([^;]+)/i, (m, urlValue) => {
-        const rewritten = rewriteUrl(urlValue.trim(), baseUrl);
+        const rewritten = rewriteUrl(urlValue.trim(), baseUrl, proxyOrigin);
         return `url=${rewritten}`;
       });
       return `${start}${updated}${end}`;
@@ -128,7 +107,7 @@ function rewriteHtml(html, baseUrl) {
   next = next.replace(
     /<style([^>]*)>([\s\S]*?)<\/style>/gi,
     (match, attrs, value) =>
-      `<style${attrs}>${rewriteCss(value, baseUrl)}</style>`,
+      `<style${attrs}>${rewriteCss(value, baseUrl, proxyOrigin)}</style>`,
   );
   return injectDeoxyScript(next, baseUrl);
 }
@@ -215,6 +194,9 @@ function injectDeoxyScript(html, baseUrl) {
               try {
                 const innerUrl = new URL(inner);
                 if (!isProxyOrigin(innerUrl.origin)) {
+                  abs.searchParams.forEach((val, key) => {
+                    if (key !== "target") innerUrl.searchParams.set(key, val);
+                  });
                   return innerUrl.toString();
                 }
                 return new URL(innerUrl.search + innerUrl.hash, base).toString();
@@ -224,7 +206,11 @@ function injectDeoxyScript(html, baseUrl) {
             }
             path = path.replace(/^\\/deoxy(?=\\/|$)/, "") || "/";
           }
-          return new URL(path + abs.search + abs.hash, base).toString();
+          const params = new URLSearchParams(abs.search);
+          params.delete("target");
+          const search = params.toString();
+          const suffix = search ? "?" + search : "";
+          return new URL(path + suffix + abs.hash, base).toString();
         };
         const toDeoxy = (url) => {
           if (!url || skip(url)) return url;
@@ -273,12 +259,6 @@ function injectDeoxyScript(html, baseUrl) {
               }
               return;
             }
-            if (abs.origin !== proxyOrigin) return;
-            const upstream = remapSameOriginToUpstream(abs);
-            if (!upstream) return;
-            const next = prefix + encodeURIComponent(upstream);
-            log("guard", reason, abs.href, "->", next);
-            nativeReplaceState({}, "", next);
           } catch (error) {
             log("guard failed", error.message);
           }
@@ -492,7 +472,6 @@ function injectDeoxyScript(html, baseUrl) {
         ensureDeoxyUrl("init");
         window.addEventListener("popstate", () => ensureDeoxyUrl("popstate"));
         window.addEventListener("hashchange", () => ensureDeoxyUrl("hashchange"));
-        window.setInterval(() => ensureDeoxyUrl("interval"), 1500);
         try {
           const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
@@ -545,81 +524,10 @@ function stripHeaders(headers) {
   STRIP_RESPONSE_HEADERS.forEach((name) => headers.delete(name));
 }
 
-function parseCookieHeader(cookieHeader) {
-  if (!cookieHeader) return {};
-  return Object.fromEntries(
-    cookieHeader
-      .split(";")
-      .map((pair) => {
-        const idx = pair.indexOf("=");
-        const key = idx === -1 ? pair.trim() : pair.slice(0, idx).trim();
-        const val = idx === -1 ? "" : pair.slice(idx + 1).trim();
-        return [key, val];
-      })
-      .filter(([key]) => key),
-  );
-}
-
-function getValidUpstreamOrigin(cookieHeader, proxyHost, referer) {
-  const cookies = parseCookieHeader(cookieHeader);
-  const raw = cookies.sfos_deoxy_base;
-  if (raw) {
-    try {
-      const originUrl = new URL(
-        decodeURIComponent(raw).includes("://")
-          ? decodeURIComponent(raw)
-          : `https://${decodeURIComponent(raw)}`,
-      );
-      if (originUrl.host !== proxyHost) return originUrl.origin;
-    } catch {
-      /* ignore */
-    }
-  }
-  if (referer) {
-    try {
-      const refTarget = new URL(referer).searchParams.get("target");
-      if (refTarget) {
-        const refUrl = new URL(refTarget);
-        if (refUrl.host !== proxyHost) return refUrl.origin;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  return null;
-}
-
-/**
- * SPA routers (e.g. DuckDuckGo) resolve history URLs against the iframe URL
- * (/deoxy?target=...), which yields /deoxy?q=... without a target param.
- */
-function recoverTargetFromCookie(requestUrl, cookieHeader, proxyHost, referer) {
-  const upstreamOrigin = getValidUpstreamOrigin(cookieHeader, proxyHost, referer);
-  if (!upstreamOrigin) return null;
-  try {
-    let path = requestUrl.pathname;
-    if (path === "/deoxy" || path.startsWith("/deoxy/")) {
-      path = path.replace(/^\/deoxy(?=\/|$)/, "") || "/";
-    }
-    return new URL(path + requestUrl.search + requestUrl.hash, upstreamOrigin).toString();
-  } catch {
-    return null;
-  }
-}
-
-function remapProxyTargetToUpstream(targetUrl, proxyHost, cookieHeader, referer) {
-  const upstreamOrigin = getValidUpstreamOrigin(cookieHeader, proxyHost, referer);
-  if (!upstreamOrigin) return null;
-  try {
-    return new URL(targetUrl.search + targetUrl.hash, upstreamOrigin).toString();
-  } catch {
-    return null;
-  }
-}
-
 export async function onRequest({ request, env }) {
   const url = new URL(request.url);
   const proxyHost = url.host;
+  const proxyOrigin = url.origin;
   const referer = request.headers.get("referer") || request.headers.get("referrer");
   const cookieHeader = request.headers.get("cookie");
   let target = url.searchParams.get("target");
@@ -709,6 +617,7 @@ export async function onRequest({ request, env }) {
   // Avoid setting forbidden headers back to the client.
   hopByHopHeaders.forEach((h) => responseHeaders.delete(h));
   stripHeaders(responseHeaders);
+  responseHeaders.set("x-sfos-deoxy", "1");
 
   if (targetUrl.host !== proxyHost) {
     responseHeaders.append(
@@ -720,14 +629,14 @@ export async function onRequest({ request, env }) {
   if (responseHeaders.has("location") && REDIRECT_STATUSES.has(upstreamResponse.status)) {
     responseHeaders.set(
       "location",
-      rewriteUrl(responseHeaders.get("location"), targetUrl),
+      rewriteUrl(responseHeaders.get("location"), targetUrl, proxyOrigin),
     );
   }
 
   const contentType = responseHeaders.get("content-type") || "";
   if (contentType.includes("text/html")) {
     const html = await upstreamResponse.text();
-    const rewritten = rewriteHtml(html, targetUrl);
+    const rewritten = rewriteHtml(html, targetUrl, proxyOrigin);
     responseHeaders.set("content-length", String(new TextEncoder().encode(rewritten).length));
     if (typeof sessionCount === "number") {
       responseHeaders.set("x-sfos-session", String(sessionCount));
@@ -740,7 +649,7 @@ export async function onRequest({ request, env }) {
   }
   if (contentType.includes("text/css")) {
     const css = await upstreamResponse.text();
-    const rewritten = rewriteCss(css, targetUrl);
+    const rewritten = rewriteCss(css, targetUrl, proxyOrigin);
     responseHeaders.set(
       "content-length",
       String(new TextEncoder().encode(rewritten).length),
