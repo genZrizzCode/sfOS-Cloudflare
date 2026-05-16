@@ -168,12 +168,16 @@ function injectDeoxyScript(html, baseUrl) {
           }
         };
         log("injected", window.location.href);
+        const proxyOrigin = window.location.origin;
+        const isProxyOrigin = (origin) => origin === proxyOrigin;
         try {
-          document.cookie =
-            "sfos_deoxy_base=" +
-            encodeURIComponent(base.origin) +
-            "; Path=/; SameSite=Lax";
-          log("cookie set", base.origin);
+          if (!isProxyOrigin(base.origin)) {
+            document.cookie =
+              "sfos_deoxy_base=" +
+              encodeURIComponent(base.origin) +
+              "; Path=/; SameSite=Lax";
+            log("cookie set", base.origin);
+          }
         } catch (error) {
           log("cookie set failed", error.message);
         }
@@ -194,38 +198,35 @@ function injectDeoxyScript(html, baseUrl) {
             url.startsWith("#")
           );
         };
-        const repairBrokenDeoxyBar = (url) => {
-          try {
-            const abs = new URL(url, window.location.href);
-            if (abs.origin !== window.location.origin) return null;
-            const p = abs.pathname;
-            if (p !== "/deoxy" && !p.startsWith("/deoxy/")) return null;
-            if (abs.searchParams.has("target")) return null;
-            const m = document.cookie.match(/(?:^|;\\s*)sfos_deoxy_base=([^;]*)/);
-            if (!m) return null;
-            let upstreamOrigin;
-            try {
-              upstreamOrigin = decodeURIComponent(m[1].trim());
-            } catch (e) {
-              return null;
+        const remapSameOriginToUpstream = (abs) => {
+          let path = abs.pathname;
+          if (path === "/deoxy" || path.startsWith("/deoxy/")) {
+            const inner = abs.searchParams.get("target");
+            if (inner) {
+              try {
+                const innerUrl = new URL(inner);
+                if (!isProxyOrigin(innerUrl.origin)) {
+                  return innerUrl.toString();
+                }
+                return new URL(innerUrl.search + innerUrl.hash, base).toString();
+              } catch (e) {
+                return null;
+              }
             }
-            let path = p.replace(/^\\/deoxy(?=\\/|$)/, "") || "/";
-            const upstream = new URL(
-              path + abs.search + abs.hash,
-              upstreamOrigin.includes("://") ? upstreamOrigin : "https://" + upstreamOrigin,
-            ).toString();
-            return prefix + encodeURIComponent(upstream);
-          } catch (e) {
-            return null;
+            path = path.replace(/^\\/deoxy(?=\\/|$)/, "") || "/";
           }
+          return new URL(path + abs.search + abs.hash, base).toString();
         };
         const toDeoxy = (url) => {
           if (!url || skip(url)) return url;
           try {
-            const repaired = repairBrokenDeoxyBar(url);
-            if (repaired) {
-              log("repair SPA bar", url, "->", repaired);
-              return repaired;
+            const abs = new URL(url, window.location.href);
+            if (abs.origin === proxyOrigin) {
+              const upstream = remapSameOriginToUpstream(abs);
+              if (!upstream) return url;
+              const next = prefix + encodeURIComponent(upstream);
+              log("remap proxy url", url, "->", next);
+              return next;
             }
             const absolute = new URL(url, base);
             return prefix + encodeURIComponent(absolute.toString());
@@ -244,20 +245,29 @@ function injectDeoxyScript(html, baseUrl) {
           try {
             const abs = new URL(window.location.href);
             if (abs.pathname.startsWith("/deoxy")) {
-              if (!abs.searchParams.has("target")) {
-                const fixed = repairBrokenDeoxyBar(
-                  abs.pathname + abs.search + abs.hash,
-                );
-                if (fixed) {
+              const existing = abs.searchParams.get("target");
+              let needsFix = !existing;
+              if (existing) {
+                try {
+                  needsFix = isProxyOrigin(new URL(existing).origin);
+                } catch (e) {
+                  needsFix = true;
+                }
+              }
+              if (needsFix) {
+                const upstream = remapSameOriginToUpstream(abs);
+                if (upstream) {
+                  const fixed = prefix + encodeURIComponent(upstream);
                   log("repair bar", reason, abs.href, "->", fixed);
                   nativeReplaceState({}, "", fixed);
                 }
               }
               return;
             }
-            if (abs.origin !== window.location.origin) return;
-            const target = new URL(abs.pathname + abs.search + abs.hash, base);
-            const next = prefix + encodeURIComponent(target.toString());
+            if (abs.origin !== proxyOrigin) return;
+            const upstream = remapSameOriginToUpstream(abs);
+            if (!upstream) return;
+            const next = prefix + encodeURIComponent(upstream);
             log("guard", reason, abs.href, "->", next);
             nativeReplaceState({}, "", next);
           } catch (error) {
@@ -543,19 +553,52 @@ function parseCookies(header = "") {
   return cookies;
 }
 
-function recoverDeoxyTargetFromCookie(requestUrl, cookieHeader) {
+function getValidUpstreamOrigin(cookieHeader, proxyHost, referer) {
   const cookies = parseCookies(cookieHeader || "");
   const upstreamOrigin = cookies.sfos_deoxy_base;
+  if (upstreamOrigin) {
+    try {
+      const originUrl = new URL(
+        upstreamOrigin.includes("://") ? upstreamOrigin : `https://${upstreamOrigin}`,
+      );
+      if (originUrl.host !== proxyHost) return originUrl.origin;
+    } catch {
+      /* ignore */
+    }
+  }
+  if (referer) {
+    try {
+      const refTarget = new URL(referer).searchParams.get("target");
+      if (refTarget) {
+        const refUrl = new URL(refTarget);
+        if (refUrl.host !== proxyHost) return refUrl.origin;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+function recoverDeoxyTargetFromCookie(requestUrl, cookieHeader, proxyHost, referer) {
+  const upstreamOrigin = getValidUpstreamOrigin(cookieHeader, proxyHost, referer);
   if (!upstreamOrigin) return null;
   try {
-    const originUrl = new URL(
-      upstreamOrigin.includes("://") ? upstreamOrigin : `https://${upstreamOrigin}`,
-    );
     let path = requestUrl.pathname;
     if (path === "/deoxy" || path.startsWith("/deoxy/")) {
       path = path.replace(/^\/deoxy(?=\/|$)/, "") || "/";
     }
-    return new URL(path + requestUrl.search + requestUrl.hash, originUrl.origin).toString();
+    return new URL(path + requestUrl.search + requestUrl.hash, upstreamOrigin).toString();
+  } catch {
+    return null;
+  }
+}
+
+function remapProxyTargetToUpstream(targetUrl, proxyHost, cookieHeader, referer) {
+  const upstreamOrigin = getValidUpstreamOrigin(cookieHeader, proxyHost, referer);
+  if (!upstreamOrigin) return null;
+  try {
+    return new URL(targetUrl.search + targetUrl.hash, upstreamOrigin).toString();
   } catch {
     return null;
   }
@@ -579,6 +622,7 @@ function maybeRedirectDeoxy(req, res) {
     if (!target) return false;
     const targetUrl = new URL(target);
     const requestUrl = new URL(req.url, `http://${req.headers.host}`);
+    if (targetUrl.host === requestUrl.host) return false;
     const nextTarget = new URL(
       `${requestUrl.pathname}${requestUrl.search}`,
       targetUrl,
@@ -603,6 +647,8 @@ function maybeRedirectDeoxyFromCookie(req, res) {
   if (!cookies.sfos_deoxy_base) return false;
   try {
     const base = new URL(cookies.sfos_deoxy_base);
+    const requestUrl = new URL(req.url, `http://${req.headers.host}`);
+    if (base.host === requestUrl.host) return false;
     const nextTarget = new URL(`${parsed.pathname}${parsed.search || ""}`, base);
     const redirect = `/deoxy?target=${encodeURIComponent(nextTarget.toString())}`;
     console.log("[deoxy] cookie-redirect", req.url, "->", redirect);
@@ -641,9 +687,16 @@ function serveStatic(req, res) {
 
 function handleDeoxy(req, res) {
   const requestUrl = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+  const proxyHost = requestUrl.host;
+  const referer = req.headers.referer || req.headers.referrer;
   let target = requestUrl.searchParams.get("target");
   if (!target) {
-    target = recoverDeoxyTargetFromCookie(requestUrl, req.headers.cookie);
+    target = recoverDeoxyTargetFromCookie(
+      requestUrl,
+      req.headers.cookie,
+      proxyHost,
+      referer,
+    );
   }
 
   if (!target) {
@@ -659,8 +712,26 @@ function handleDeoxy(req, res) {
     return;
   }
 
+  if (targetUrl.host === proxyHost) {
+    const remapped = remapProxyTargetToUpstream(
+      targetUrl,
+      proxyHost,
+      req.headers.cookie,
+      referer,
+    );
+    if (remapped) {
+      target = remapped;
+      targetUrl = new URL(remapped);
+    }
+  }
+
   if (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") {
     sendError(res, 400, "Only http and https are supported");
+    return;
+  }
+
+  if (targetUrl.host === proxyHost) {
+    sendError(res, 400, "Cannot proxy the deoxy host as a target");
     return;
   }
 
@@ -688,16 +759,18 @@ function handleDeoxy(req, res) {
     const status = deoxyRes.statusCode || 500;
     const headers = { ...deoxyRes.headers };
     stripHeaders(headers);
-    const cookieValue = `sfos_deoxy_base=${encodeURIComponent(
-      targetUrl.origin,
-    )}; Path=/; SameSite=Lax`;
-    if (headers["set-cookie"]) {
-      const existing = Array.isArray(headers["set-cookie"])
-        ? headers["set-cookie"]
-        : [headers["set-cookie"]];
-      headers["set-cookie"] = [...existing, cookieValue];
-    } else {
-      headers["set-cookie"] = cookieValue;
+    if (targetUrl.host !== proxyHost) {
+      const cookieValue = `sfos_deoxy_base=${encodeURIComponent(
+        targetUrl.origin,
+      )}; Path=/; SameSite=Lax`;
+      if (headers["set-cookie"]) {
+        const existing = Array.isArray(headers["set-cookie"])
+          ? headers["set-cookie"]
+          : [headers["set-cookie"]];
+        headers["set-cookie"] = [...existing, cookieValue];
+      } else {
+        headers["set-cookie"] = cookieValue;
+      }
     }
 
     if (headers.location && REDIRECT_STATUSES.has(status)) {

@@ -50,6 +50,9 @@ export async function onRequest(context) {
 
   try {
     const targetUrl = new URL(target);
+    if (targetUrl.host === url.host) {
+      return next();
+    }
     const nextTarget = new URL(`${url.pathname}${url.search}`, targetUrl);
     const redirect = `/deoxy?target=${encodeURIComponent(nextTarget.toString())}`;
     console.log("[deoxy] middleware redirect", url.pathname, "->", redirect);
