@@ -1,9 +1,3 @@
-import {
-  recoverTargetFromCookie,
-  remapProxyTargetToUpstream,
-  rewriteUrl,
-} from "./deoxy-shared.js";
-
 const STRIP_RESPONSE_HEADERS = new Set([
   "content-security-policy",
   "content-security-policy-report-only",
@@ -44,29 +38,56 @@ async function incrementSessionCount(env) {
   return row && typeof row.count === "number" ? row.count : null;
 }
 
-function rewriteSrcset(value, baseUrl, proxyOrigin) {
+function rewriteUrl(value, baseUrl) {
+  if (!value) return value;
+  const trimmed = value.trim();
+  if (
+    trimmed.startsWith("/deoxy?target=") ||
+    trimmed.startsWith("about:") ||
+    trimmed.startsWith("blob:") ||
+    trimmed.startsWith("data:") ||
+    trimmed.startsWith("javascript:") ||
+    trimmed.startsWith("mailto:") ||
+    trimmed.startsWith("moz-extension:") ||
+    trimmed.startsWith("safari-extension:") ||
+    trimmed.startsWith("tel:") ||
+    trimmed.startsWith("chrome-extension:") ||
+    trimmed.startsWith("edge:") ||
+    trimmed.startsWith("#")
+  ) {
+    return trimmed;
+  }
+  try {
+    const absolute = new URL(trimmed, baseUrl);
+    return `/deoxy?target=${encodeURIComponent(absolute.toString())}`;
+  } catch {
+    return value;
+  }
+}
+
+function rewriteSrcset(value, baseUrl) {
   if (!value) return value;
   return value
     .split(",")
     .map((entry) => {
       const parts = entry.trim().split(/\s+/);
       if (!parts.length) return entry;
-      const rewritten = rewriteUrl(parts[0], baseUrl, proxyOrigin);
+      const rewritten = rewriteUrl(parts[0], baseUrl);
       return [rewritten, ...parts.slice(1)].join(" ");
     })
     .join(", ");
 }
 
-function rewriteCss(css, baseUrl, proxyOrigin) {
+function rewriteCss(css, baseUrl) {
   if (!css) return css;
   let next = css.replace(
     /@import\s+(?:url\()?\s*['"]?([^'")\s]+)['"]?\s*\)?/gi,
-    (match, value) => match.replace(value, rewriteUrl(value, baseUrl, proxyOrigin)),
+    (match, value) => match.replace(value, rewriteUrl(value, baseUrl)),
   );
   next = next.replace(
     /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi,
     (match, quote, value) => {
-      const rewritten = rewriteUrl(value, baseUrl, proxyOrigin);
+      const rewritten = rewriteUrl(value, baseUrl);
       if (!rewritten || rewritten === value) return match;
       const q = quote || "";
       return `url(${q}${rewritten}${q})`;
@@ -75,7 +96,7 @@ function rewriteCss(css, baseUrl, proxyOrigin) {
   return next;
 }
 
-function rewriteHtml(html, baseUrl, proxyOrigin) {
+function rewriteHtml(html, baseUrl) {
   let next = html;
   next = next.replace(
     /<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi,
@@ -83,22 +104,22 @@ function rewriteHtml(html, baseUrl, proxyOrigin) {
   );
   next = next.replace(
     /\s(href|src|action)=["']([^"']+)["']/gi,
-    (match, attr, value) => ` ${attr}="${rewriteUrl(value, baseUrl, proxyOrigin)}"`,
+    (match, attr, value) => ` ${attr}="${rewriteUrl(value, baseUrl)}"`,
   );
   next = next.replace(
     /\ssrcset=["']([^"']+)["']/gi,
-    (match, value) => ` srcset="${rewriteSrcset(value, baseUrl, proxyOrigin)}"`,
+    (match, value) => ` srcset="${rewriteSrcset(value, baseUrl)}"`,
   );
   next = next.replace(
     /\sstyle=(["'])([^"']*)\1/gi,
     (match, quote, value) =>
-      ` style=${quote}${rewriteCss(value, baseUrl, proxyOrigin)}${quote}`,
+      ` style=${quote}${rewriteCss(value, baseUrl)}${quote}`,
   );
   next = next.replace(
     /(<meta[^>]+http-equiv=["']?refresh["']?[^>]*content=["'])([^"']*)(["'][^>]*>)/gi,
     (match, start, content, end) => {
       const updated = content.replace(/url\s*=\s*([^;]+)/i, (m, urlValue) => {
-        const rewritten = rewriteUrl(urlValue.trim(), baseUrl, proxyOrigin);
+        const rewritten = rewriteUrl(urlValue.trim(), baseUrl);
         return `url=${rewritten}`;
       });
       return `${start}${updated}${end}`;
@@ -107,7 +128,7 @@ function rewriteHtml(html, baseUrl, proxyOrigin) {
   next = next.replace(
     /<style([^>]*)>([\s\S]*?)<\/style>/gi,
     (match, attrs, value) =>
-      `<style${attrs}>${rewriteCss(value, baseUrl, proxyOrigin)}</style>`,
+      `<style${attrs}>${rewriteCss(value, baseUrl)}</style>`,
   );
   return injectDeoxyScript(next, baseUrl);
 }
@@ -156,16 +177,12 @@ function injectDeoxyScript(html, baseUrl) {
           }
         };
         log("injected", window.location.href);
-        const proxyOrigin = window.location.origin;
-        const isProxyOrigin = (origin) => origin === proxyOrigin;
         try {
-          if (!isProxyOrigin(base.origin)) {
-            document.cookie =
-              "sfos_deoxy_base=" +
-              encodeURIComponent(base.origin) +
-              "; Path=/; SameSite=Lax";
-            log("cookie set", base.origin);
-          }
+          document.cookie =
+            "sfos_deoxy_base=" +
+            encodeURIComponent(base.origin) +
+            "; Path=/; SameSite=Lax";
+          log("cookie set", base.origin);
         } catch (error) {
           log("cookie set failed", error.message);
         }
@@ -186,43 +203,9 @@ function injectDeoxyScript(html, baseUrl) {
             url.startsWith("#")
           );
         };
-        const remapSameOriginToUpstream = (abs) => {
-          let path = abs.pathname;
-          if (path === "/deoxy" || path.startsWith("/deoxy/")) {
-            const inner = abs.searchParams.get("target");
-            if (inner) {
-              try {
-                const innerUrl = new URL(inner);
-                if (!isProxyOrigin(innerUrl.origin)) {
-                  abs.searchParams.forEach((val, key) => {
-                    if (key !== "target") innerUrl.searchParams.set(key, val);
-                  });
-                  return innerUrl.toString();
-                }
-                return new URL(innerUrl.search + innerUrl.hash, base).toString();
-              } catch (e) {
-                return null;
-              }
-            }
-            path = path.replace(/^\\/deoxy(?=\\/|$)/, "") || "/";
-          }
-          const params = new URLSearchParams(abs.search);
-          params.delete("target");
-          const search = params.toString();
-          const suffix = search ? "?" + search : "";
-          return new URL(path + suffix + abs.hash, base).toString();
-        };
         const toDeoxy = (url) => {
           if (!url || skip(url)) return url;
           try {
-            const abs = new URL(url, window.location.href);
-            if (abs.origin === proxyOrigin) {
-              const upstream = remapSameOriginToUpstream(abs);
-              if (!upstream) return url;
-              const next = prefix + encodeURIComponent(upstream);
-              log("remap proxy url", url, "->", next);
-              return next;
-            }
             const absolute = new URL(url, base);
             return prefix + encodeURIComponent(absolute.toString());
           } catch (error) {
@@ -238,27 +221,16 @@ function injectDeoxyScript(html, baseUrl) {
         };
         const ensureDeoxyUrl = (reason) => {
           try {
-            const abs = new URL(window.location.href);
-            if (abs.pathname.startsWith("/deoxy")) {
-              const existing = abs.searchParams.get("target");
-              let needsFix = !existing;
-              if (existing) {
-                try {
-                  needsFix = isProxyOrigin(new URL(existing).origin);
-                } catch (e) {
-                  needsFix = true;
-                }
-              }
-              if (needsFix) {
-                const upstream = remapSameOriginToUpstream(abs);
-                if (upstream) {
-                  const fixed = prefix + encodeURIComponent(upstream);
-                  log("repair bar", reason, abs.href, "->", fixed);
-                  nativeReplaceState({}, "", fixed);
-                }
-              }
-              return;
-            }
+            if (window.location.pathname.startsWith("/deoxy")) return;
+            const current = new URL(window.location.href);
+            if (current.origin !== window.location.origin) return;
+            const target = new URL(
+              current.pathname + current.search + current.hash,
+              base,
+            );
+            const next = prefix + encodeURIComponent(target.toString());
+            log("guard", reason, current.href, "->", next);
+            nativeReplaceState({}, "", next);
           } catch (error) {
             log("guard failed", error.message);
           }
@@ -472,6 +444,7 @@ function injectDeoxyScript(html, baseUrl) {
         ensureDeoxyUrl("init");
         window.addEventListener("popstate", () => ensureDeoxyUrl("popstate"));
         window.addEventListener("hashchange", () => ensureDeoxyUrl("hashchange"));
+        window.setInterval(() => ensureDeoxyUrl("interval"), 1500);
         try {
           const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
@@ -524,16 +497,9 @@ function stripHeaders(headers) {
   STRIP_RESPONSE_HEADERS.forEach((name) => headers.delete(name));
 }
 
-export async function handleDeoxyRequest({ request, env }) {
+export async function onRequest({ request, env }) {
   const url = new URL(request.url);
-  const proxyHost = url.host;
-  const proxyOrigin = url.origin;
-  const referer = request.headers.get("referer") || request.headers.get("referrer");
-  const cookieHeader = request.headers.get("cookie");
-  let target = url.searchParams.get("target");
-  if (!target) {
-    target = recoverTargetFromCookie(url, cookieHeader, proxyHost, referer);
-  }
+  const target = url.searchParams.get("target");
 
   if (!target) {
     return new Response("Missing target query parameter", { status: 400 });
@@ -546,25 +512,8 @@ export async function handleDeoxyRequest({ request, env }) {
     return new Response("Invalid target URL", { status: 400 });
   }
 
-  if (targetUrl.host === proxyHost) {
-    const remapped = remapProxyTargetToUpstream(
-      targetUrl,
-      proxyHost,
-      cookieHeader,
-      referer,
-    );
-    if (remapped) {
-      target = remapped;
-      targetUrl = new URL(remapped);
-    }
-  }
-
   if (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") {
     return new Response("Only http and https are supported", { status: 400 });
-  }
-
-  if (targetUrl.host === proxyHost) {
-    return new Response("Cannot proxy the deoxy host as a target", { status: 400 });
   }
 
   console.log("[deoxy] request", targetUrl.toString());
@@ -617,26 +566,23 @@ export async function handleDeoxyRequest({ request, env }) {
   // Avoid setting forbidden headers back to the client.
   hopByHopHeaders.forEach((h) => responseHeaders.delete(h));
   stripHeaders(responseHeaders);
-  responseHeaders.set("x-sfos-deoxy", "1");
 
-  if (targetUrl.host !== proxyHost) {
-    responseHeaders.append(
-      "set-cookie",
-      `sfos_deoxy_base=${encodeURIComponent(targetUrl.origin)}; Path=/; SameSite=Lax`,
-    );
-  }
+  responseHeaders.append(
+    "set-cookie",
+    `sfos_deoxy_base=${encodeURIComponent(targetUrl.origin)}; Path=/; SameSite=Lax`,
+  );
 
   if (responseHeaders.has("location") && REDIRECT_STATUSES.has(upstreamResponse.status)) {
     responseHeaders.set(
       "location",
-      rewriteUrl(responseHeaders.get("location"), targetUrl, proxyOrigin),
+      rewriteUrl(responseHeaders.get("location"), targetUrl),
     );
   }
 
   const contentType = responseHeaders.get("content-type") || "";
   if (contentType.includes("text/html")) {
     const html = await upstreamResponse.text();
-    const rewritten = rewriteHtml(html, targetUrl, proxyOrigin);
+    const rewritten = rewriteHtml(html, targetUrl);
     responseHeaders.set("content-length", String(new TextEncoder().encode(rewritten).length));
     if (typeof sessionCount === "number") {
       responseHeaders.set("x-sfos-session", String(sessionCount));
@@ -649,7 +595,7 @@ export async function handleDeoxyRequest({ request, env }) {
   }
   if (contentType.includes("text/css")) {
     const css = await upstreamResponse.text();
-    const rewritten = rewriteCss(css, targetUrl, proxyOrigin);
+    const rewritten = rewriteCss(css, targetUrl);
     responseHeaders.set(
       "content-length",
       String(new TextEncoder().encode(rewritten).length),
