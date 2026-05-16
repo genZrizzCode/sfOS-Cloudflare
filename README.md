@@ -17,10 +17,13 @@ sfOS can run on Cloudflare Pages, so visitors don’t need to run any console co
 ### Structure
 
 - Static files: `index.html`, `styles.css`, `app.js`, etc.
-- Deoxy function: `functions/deoxy.js` (Cloudflare Pages Function).
-- Session counter: `functions/session.js` (Cloudflare Pages Function, uses D1).
+- Pages Functions router: `functions/[[path]].js` (routes `/ping`, `/deoxy`, `/session`).
+- Deoxy proxy logic: `functions/lib/deoxy.js`.
+- Session counter: `functions/lib/session.js` (uses D1).
 
-The Nebula Tunnel window uses a relative endpoint: `/deoxy?target=...`, which will be handled by `functions/deoxy.js`.
+The Nebula Tunnel window uses a relative endpoint: `/deoxy?target=...`, which is handled by the Pages Function.
+
+**Verify Functions are live after deploy:** open `/ping` — you must get an **empty 204** response (not the sfOS HTML). If you see the desktop UI, Functions did not deploy; check that **Build output directory** is `.` (repo root) and the deploy log has no Function build errors.
 
 ### Basic deployment steps
 
@@ -40,7 +43,7 @@ Once deployed:
 
 ## Notes
 
-- The UI and tunnel status are simulated in `app.js`, but real deoxy proxying runs via `functions/deoxy.js` (Cloudflare Pages) or `server.js` locally.
+- The UI and tunnel status are simulated in `app.js`, but real deoxy proxying runs via `functions/[[path]].js` (Cloudflare Pages) or `server.js` locally.
 - Update the endpoint, mode, and toggle in the Deoxy Center to see changes reflected across the UI.
 - Menu bar time shows seconds and syncs to WorldTimeAPI every 10 minutes with device-time fallback.
 - Menu bar battery uses the browser Battery API when available.

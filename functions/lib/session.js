@@ -11,7 +11,7 @@ async function ensureSessionTable(env) {
   sessionTableReady = true;
 }
 
-export async function onRequest({ env }) {
+export async function handleSessionRequest({ env }) {
   if (!env || !env.DB) {
     return new Response(JSON.stringify({ count: null, error: "D1 not configured" }), {
       status: 200,

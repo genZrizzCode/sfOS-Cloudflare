@@ -524,7 +524,7 @@ function stripHeaders(headers) {
   STRIP_RESPONSE_HEADERS.forEach((name) => headers.delete(name));
 }
 
-export async function onRequest({ request, env }) {
+export async function handleDeoxyRequest({ request, env }) {
   const url = new URL(request.url);
   const proxyHost = url.host;
   const proxyOrigin = url.origin;

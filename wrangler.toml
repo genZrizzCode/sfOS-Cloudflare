@@ -1,3 +1,6 @@
 name = "sfos"
 compatibility_date = "2024-11-01"
 pages_build_output_dir = "."
+
+# Pages Functions live in ./functions (see functions/[[path]].js).
+# Build output must be the repo root (where index.html and functions/ both exist).
