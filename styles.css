@@ -1060,3 +1060,16 @@ body.theme-dark .calc-key.is-operator {
     transition: none !important;
   }
 }
+
+.status-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+
+.status-header {
+  font-size: 24px;
+  font-weight: bold;
+}
