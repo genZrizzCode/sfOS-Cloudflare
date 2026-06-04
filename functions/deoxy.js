@@ -543,8 +543,7 @@ export async function onRequest({ request, env }) {
     "cf-ipcountry",
     "cf-visitor",
   ];
-  hopByHopHeaders.forEach((h) => requestHeaders.delete(h));
-  requestHeaders.set("accept-encoding", "identity");
+  requestHeaders.set("accept-encoding", "gzip, deflate");
 
   const init = {
     method: request.method,
